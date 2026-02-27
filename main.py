@@ -1,34 +1,60 @@
 import psutil
 import os
 import subprocess
+import getpass
+import json
+import shlex
 
 ##### FUNCTIONS #####
 ###USB RECOGNITION###
-paths=["/media", "/run/media"]
 def find_usb():
-    usbdict = {}    #DICTIONARY WHERE USB MOUNT PATH IS KEY AND LABEL IS VALUE
+    usbdict = {}    # DICTIONARY WHERE USB MOUNT PATH IS KEY AND LABEL IS VALUE
+    
+    # Get current username
+    username = getpass.getuser()
+    
+    # Properly formatted paths with actual username
+    paths = ["/media", "/run/media", f"/media/{username}"]
+    
+    # First, collect all possible user directories from media paths
+    all_directories = []
     for path in paths:
         if os.path.exists(path) and os.path.isdir(path):
-            directories = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
-            print(directories)
-        # else:
-        #     print("doesnt exist")
+            try:
+                directories = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
+                all_directories.extend([os.path.join(path, d) for d in directories])
+            except PermissionError:
+                print(f"Permission denied accessing {path}")
+                continue
+    
+    # Check each partition to see if it matches our potential mount points
     for part in psutil.disk_partitions():
-        for i in directories:
-            mountpaths = f"/media/{i}"
-            # if os.path.exists(mountpaths) and os.path.isdir(mountpaths):
-            #     print(mountpaths)
-            if part.mountpoint == mountpaths:
+        for mount_path in all_directories:
+            if part.mountpoint == mount_path:
                 device_node = part.device
-                # break
                 if device_node:
-                    # -d (device only), -n (no headings), -o (output column LABEL)
-                    label = subprocess.check_output(["lsblk", "-d", "-n", "-o", "LABEL", device_node], text=True).strip()   #CHECKS FOR LABELS OF A USB
-                    print(f"The label for {mountpaths} is: {label}")
-                    usbdict[mountpaths] = label
-                    print(usbdict)
-                else:
-                    print("Mount point not found.")
+                    try:
+                        # Get the label of the USB device
+                        label = subprocess.check_output(["lsblk", "-d", "-n", "-o", "LABEL", device_node], text=True, timeout=5).strip()
+                        if not label:  # If no label, use directory name
+                            label = os.path.basename(mount_path)
+                        usbdict[mount_path] = label
+                        print(f"Found USB: {mount_path} -> {label}")
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                        # If lsblk fails, use directory name as fallback
+                        label = os.path.basename(mount_path)
+                        usbdict[mount_path] = label
+                        print(f"Found USB: {mount_path} -> {label}")
+    
+    return usbdict
 
-find_usb()
+# Find USB devices and pass them to GUI
+usb_devices = find_usb()
+print("Detected USB devices:", usb_devices)
 
+# Use JSON encoding for safer passing of data
+import urllib.parse
+usb_json = json.dumps(usb_devices)
+encoded_data = urllib.parse.quote(usb_json)
+
+os.system(f'python gui.py "{encoded_data}"')
