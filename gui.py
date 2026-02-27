@@ -33,7 +33,7 @@ class LogWindow(QDialog):
         
         self.setLayout(layout)
 
-class RufusClone(QMainWindow):
+class Rufus(QMainWindow):
     def __init__(self, usb_devices=None):
         super().__init__()
         self.usb_devices = usb_devices or {}
@@ -94,7 +94,6 @@ class RufusClone(QMainWindow):
                 background-color: #F0F0F0;
                 border-color: #D0D0D0;
             }
-            /* The Big Green Start Button - Exact Rufus Green */
             #btnStart {
                 background-color: #00CC00;
                 color: white;
@@ -228,15 +227,11 @@ class RufusClone(QMainWindow):
         
         btn_select = QPushButton("SELECT")
         btn_select.clicked.connect(self.browse_file)
-        
-        btn_boot_arrow = QToolButton()
-        btn_boot_arrow.setText("▼")
-        btn_boot_arrow.setFixedWidth(25)
+
         
         boot_row.addWidget(self.combo_boot, 1)
         boot_row.addWidget(lbl_check)
         boot_row.addWidget(btn_select)
-        boot_row.addWidget(btn_boot_arrow)
         
         boot_layout = QVBoxLayout()
         boot_layout.setSpacing(2)
@@ -490,6 +485,6 @@ if __name__ == "__main__":
     else:
         print("No USB devices data received")
     
-    window = RufusClone(usb_devices)
+    window = Rufus(usb_devices)
     window.show()
     sys.exit(app.exec())
