@@ -206,7 +206,7 @@ class Rufus(QMainWindow):
         # Populate combo box with detected USB devices
         if self.usb_devices:
             for path, label in self.usb_devices.items():
-                self.combo_device.addItem(f"{label} ({path})")
+                self.combo_device.addItem(f"{label} ({path})")  #need to get the label and path from main.py
         else:
             self.combo_device.addItem("No USB devices found")
         
