@@ -3,7 +3,6 @@ import json
 import sys
 import urllib.parse
 from src.drives.find_usb import find_usb
-import shlex
 
 def launch_gui_with_usb_data() -> None:
     usb_devices = find_usb()
@@ -13,7 +12,7 @@ def launch_gui_with_usb_data() -> None:
     encoded_data = urllib.parse.quote(usb_json)
 
     try:
-        shlex.escape([sys.executable, "src/gui.py", encoded_data], check=True)
+        subprocess.run([sys.executable, "src/gui.py", encoded_data], check=True)
     except FileNotFoundError as e:
         print(f"Failed to launch GUI: executable or script not found: {e}")
         sys.exit(1)
