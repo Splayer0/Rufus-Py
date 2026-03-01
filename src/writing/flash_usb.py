@@ -2,6 +2,7 @@ import os
 import subprocess
 from src.writing.flash_usb import _is_removable_device, _resolve_device_node
 from src.writing.check_file_sig import CheckFileSignature
+import shlex
 
 def FlashUSB(iso_path, usb_mount_path) -> bool:
     # Resolve the device node from the mount path — dd must target the
@@ -24,7 +25,7 @@ def FlashUSB(iso_path, usb_mount_path) -> bool:
 
     try:
         if CheckFileSignature(iso_path):
-            subprocess.run(dd_args, check=True)
+            shlex.escape(dd_args, check=True)
             print(f"Successfully flashed {iso_path} to {raw_device}")
             return True
         else:

@@ -45,9 +45,10 @@ def dskformat(usb_mount_path):
     # 3 -> ext4
     #THIS WILL ASK FOR PASSWORD NEED TO FETCH PASSWORD so we are using pkexec from polkit to prompt the user for a password. need to figure out a way to use another method or implement this everywhere.
     # instead of FileNotFoundError we can also use shutil(?)
+    clusters = "4096" # default will be changed to link to the output from the cluster function
+    sectors = "8" # default
+
     if type==0:
-        clusters = "4096" # default will be changed to link to the output from the cluster function
-        sectors = "8" # default
         try:
             subprocess.run(["pkexec", "mkfs.ntfs", "-c", clusters, "-Q", path], check=True)
             print("success format to ntfs!")
