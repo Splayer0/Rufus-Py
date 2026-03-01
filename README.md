@@ -10,11 +10,9 @@ Rufus-Py is a physical drive imaging and formatting tool written in python which
 
 🎯 AIM
 
-Porting the capabilities of Rufus to linux
-
-Easier usb drive management for newbies to linux
-
-Easier imaging for newbies to linux
+- Porting the capabilities of Rufus to linux
+- Easier usb drive management for newbies to linux
+- Easier imaging for newbies to linux
 
 Any contribution, testing and feedback is appreciated.
 
