@@ -41,7 +41,7 @@ def check_iso_signature(file_path: str) -> bool:
 
     return False
 
-def _parent_block_device(device_node) -> str | None:
+def _parent_block_device(device_node: str) -> str | None:
     dev_name = os.path.basename(device_node)
     sys_class = Path("/sys/class/block") / dev_name
 
@@ -55,7 +55,7 @@ def _parent_block_device(device_node) -> str | None:
         return None
 
 
-def _is_removable_device(device_node) -> bool:
+def _is_removable_device(device_node: str) -> bool:
     """Check that a device is removable (e.g. USB stick) before writing to it."""
     disk_node = _parent_block_device(device_node=device_node) or device_node
     base_name = os.path.basename(disk_node) # no rstrip() func here; breaks device names like mmcblk0
