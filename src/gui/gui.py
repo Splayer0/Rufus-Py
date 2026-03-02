@@ -9,7 +9,13 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QLineEdit, QFrame, QStatusBar, QToolButton, QSpacerItem)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
-import states
+
+# importing states shenangians (blame ami)
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+from writing import states
+
 from windows.main_window import Rufus
 
 if __name__ == "__main__":
