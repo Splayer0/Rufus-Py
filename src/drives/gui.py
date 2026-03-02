@@ -253,7 +253,8 @@ class Rufus(QMainWindow):
         self.combo_image_option.addItem("Windows To Go")
         self.combo_image_option.addItem("Windows To Go")
         self.combo_image_option.addItem("Standard Linux")
-        
+        self.combo_image_option.currentTextChanged.connect(self.update_image_option)
+
         image_layout = QVBoxLayout()
         image_layout.setSpacing(2)
         image_layout.addWidget(lbl_image)
@@ -270,13 +271,15 @@ class Rufus(QMainWindow):
         self.combo_partition = QComboBox()
         self.combo_partition.addItem("GPT")
         self.combo_partition.addItem("MBR")
-        
+        self.combo_partition.currentTextChanged.connect(self.update_partition_scheme)
+
         lbl_target = QLabel("Target system")
         lbl_target.setStyleSheet("font-weight: normal; font-size: 9pt;")
         self.combo_target = QComboBox()
         self.combo_target.addItem("UEFI (non CSM)")
         self.combo_target.addItem("BIOS (or UEFI-CSM)")
-        
+        self.combo_target.currentTextChanged.connect(self.update_target_system)
+
         grid_part.addWidget(lbl_part, 0, 0)
         grid_part.addWidget(self.combo_partition, 1, 0)
         grid_part.addWidget(lbl_target, 0, 2)
@@ -323,7 +326,7 @@ class Rufus(QMainWindow):
         self.combo_cluster = QComboBox()
         self.combo_cluster.addItem("4096 bytes (Default)")
         self.combo_cluster.addItem("8192 bytes")
-        
+        self.combo_cluster.currentTextChanged.connect(self.update_cluster_size)
         grid_fmt.addWidget(lbl_fs, 0, 0)
         grid_fmt.addWidget(self.combo_fs, 1, 0)
         grid_fmt.addWidget(lbl_cluster, 0, 2)
@@ -337,8 +340,11 @@ class Rufus(QMainWindow):
 
         self.chk_quick = QCheckBox("Quick format")
         self.chk_quick.setChecked(True)
+        self.chk_quick.stateChanged.connect(self.update_QF)
+
         self.chk_extended = QCheckBox("Create extended label and icon files")
         self.chk_extended.setChecked(True)
+        self.chk_extended.stateChanged.connect(self.update_create_extended)
         
         bad_blocks_row = QHBoxLayout()
         self.chk_badblocks = QCheckBox("Check device for bad blocks")
@@ -346,6 +352,7 @@ class Rufus(QMainWindow):
         self.combo_badblocks.addItem("1 pass")
         self.combo_badblocks.setFixedWidth(100)
         self.combo_badblocks.setEnabled(False)
+        self.chk_badblocks.stateChanged.connect(self.update_check_bad)
         
         bad_blocks_row.addWidget(self.chk_badblocks)
         bad_blocks_row.addWidget(self.combo_badblocks)
@@ -426,6 +433,46 @@ class Rufus(QMainWindow):
     def updateFS(self):
         states.currentFS = self.combo_fs.currentIndex()
         # print(f"Global state updated to: {states.currentFS}")
+    
+    def update_image_option(self):
+        states.image_option = self.combo_image_option.currentIndex()
+        # print(f"Global state updated to: {states.image_option}")
+    
+    def update_partition_scheme(self):
+        states.partition_scheme = self.combo_partition.currentIndex()
+        # print(f"Global state updated to: {states.partition_scheme}")
+
+    def update_target_system(self):
+        states.target_system = self.combo_target.currentIndex()
+        # print(f"Global state updated to: {states.target_system}")
+    
+    def update_cluster_size(self):
+        states.cluster_size = self.combo_cluster.currentIndex()
+        # print(f"Global state updated to: {states.cluster_size}")
+
+    def update_QF(self):
+        if self.chk_quick.isChecked():
+            states.QF = 0
+            # print(states.QF)
+        else:
+            states.QF = 1
+            # print(states.QF)
+
+    def update_create_extended(self):
+        if self.chk_extended.isChecked():
+            states.create_extended = 0
+            # print(states.create_extended)
+        else:
+            states.create_extended = 1
+            # print(states.create_extended)
+
+    def update_check_bad(self):
+        if self.chk_badblocks.isChecked():
+            states.check_bad = 0
+            # print(states.check_bad)
+        else:
+            states.check_bad = 1
+            # print(states.check_bad)
 
     def browse_file(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Select Disk Image", "", "ISO Images (*.iso);;All Files (*)")

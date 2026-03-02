@@ -18,7 +18,7 @@ def launch_gui_with_usb_data() -> None:
         sys.exit(1)
     except subprocess.CalledProcessError as e:
         print(f"GUI exited with an error (return code {e.returncode}): {e}")
-        sys.exit(e.returncode)
+        sys.exit(e.returncode or e)
     except Exception as e:
         print(f"Unexpected error while launching GUI: {e}")
         sys.exit(1)    
