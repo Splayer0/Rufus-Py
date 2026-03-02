@@ -18,7 +18,7 @@ def volumecustomlabel():
     type = states.currentFS
     # 2. unmount the drive
     try:
-        subprocess.run(["pkexec", "umount", drive])
+        subprocess.run(["pkexec", "umount", drive], check=True)
     except FileNotFoundError:
         pkexecNotFound()
     except subprocess.CalledProcessError:
