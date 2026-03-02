@@ -394,7 +394,7 @@ class Rufus(QMainWindow):
         btn_icon2 = QToolButton()
         btn_icon2.setText("ℹ")
         btn_icon2.setToolTip("About")
-        btn_icon4.clicked.connect(self.show_about)
+        btn_icon2.clicked.connect(self.show_about)
         
         btn_icon3 = QToolButton()
         btn_icon3.setText("⚙")
