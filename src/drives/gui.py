@@ -24,6 +24,19 @@ class LogWindow(QDialog):
         layout.addWidget(self.log_text)
         self.setLayout(layout)
 
+class AboutWindow(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("About")
+        self.resize(650, 450)
+        layout = QVBoxLayout()
+        self.about_text = QTextEdit()
+        self.about_text.setReadOnly(True)
+        self.about_text.setFont(QFont("Consolas", 9))
+        self.about_text.setStyleSheet("background-color: white; border: 1px solid #ccc;")
+        layout.addWidget(self.about_text)
+        self.setLayout(layout)
+
 class Rufus(QMainWindow):
     def __init__(self, usb_devices=None):
         super().__init__()
@@ -381,6 +394,7 @@ class Rufus(QMainWindow):
         btn_icon2 = QToolButton()
         btn_icon2.setText("ℹ")
         btn_icon2.setToolTip("About")
+        btn_icon4.clicked.connect(self.show_about)
         
         btn_icon3 = QToolButton()
         btn_icon3.setText("⚙")
@@ -478,9 +492,17 @@ class Rufus(QMainWindow):
         self.log_window = LogWindow()
         self.log_window.show()
 
+    def show_about(self):
+        self.about_window = AboutWindow()
+        self.about_window.show()
+
     def log_message(self, msg):
         if hasattr(self, 'log_window'):
             self.log_window.log_text.append(f"[INFO] {msg}")
+
+    def about_message(self, msg):
+        if hasattr(self, 'about_window'):
+            self.log_window.about_text.append(f"Rufus-Py is a disk image writer written in py for linux")
 
     def start_process(self):
         self.btn_start.setEnabled(False)
