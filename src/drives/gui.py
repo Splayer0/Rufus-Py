@@ -1,6 +1,7 @@
 import sys
 import json
 import urllib.parse
+import webbrowser
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QGridLayout, QLabel, QComboBox, 
                              QPushButton, QProgressBar, QCheckBox, 
@@ -21,17 +22,6 @@ class LogWindow(QDialog):
         self.log_text.setFont(QFont("Consolas", 9))
         self.log_text.setStyleSheet("background-color: white; border: 1px solid #ccc;")
         layout.addWidget(self.log_text)
-        
-        self.log_text.append("Rufus")
-        self.log_text.append("Distro Name: ")
-        self.log_text.append("Syslinux versions: 6.04-pre1 (installed), 6.04-pre1 (embedded)")
-        self.log_text.append("Grub versions: 2.06 (embedded)")
-        self.log_text.append("E2fsprogs version: 1.47.0 (embedded)")
-        self.log_text.append("Vulkan Renderer: None")
-        self.log_text.append("Locale: ")
-        self.log_text.append("------------------------------------------------")
-        self.log_text.append("Ready.")
-        
         self.setLayout(layout)
 
 class Rufus(QMainWindow):
@@ -385,6 +375,8 @@ class Rufus(QMainWindow):
         btn_icon1 = QToolButton()
         btn_icon1.setText("🌐")
         btn_icon1.setToolTip("Download updates")
+        btn_icon1.clicked.connect(lambda: webbrowser.open('http://www.github.com/hog185/rufus-py'))
+
         
         btn_icon2 = QToolButton()
         btn_icon2.setText("ℹ")
