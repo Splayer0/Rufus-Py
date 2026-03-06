@@ -750,6 +750,7 @@ class Rufus(QMainWindow):
         self.statusBar.showMessage("Ready", 0)
     
     def start_process(self):
+        ### FLASHING
         if not getattr(states, 'iso_path', '') or not Path(states.iso_path).exists():
             QMessageBox.warning(self, "No Image", "Please select a valid installation file first.")
             return
@@ -771,6 +772,33 @@ class Rufus(QMainWindow):
         self.flash_worker.start()
         
         self.log_message(f"Starting flash process: {states.iso_path} -> {mount_path}")
+
+    ### FORMATTING
+    # def start_process(self):
+    #     self.btn_start.setEnabled(False)
+    #     self.btn_cancel.setEnabled(True)
+    #     self.progress_bar.setValue(10)
+    #     self.progress_bar.setFormat("Starting.. 10%")
+    #     # unmount
+    #     fo.unmount()
+    #     self.progress_bar.setValue(30)
+    #     self.progress_bar.setFormat("Unmounted Drive.. 20%")
+    #     # we must either flash iso or format the drive
+    #     # logic will be implemented later
+    #     # dd flashing goes here
+
+    #     # format the drive
+    #     fo.dskformat()
+    #     self.progress_bar.setValue(60)
+    #     self.progress_bar.setFormat("Format Drive.. 60%")
+    #     # change label
+    #     fo.volumecustomlabel()
+    #     self.progress_bar.setValue(80)
+    #     self.progress_bar.setFormat("Changed Label.. 80%")
+    #     # re-mount
+    #     fo.remount()
+    #     self.progress_bar.setValue(100)
+    #     self.progress_bar.setFormat("Mount Done.. Completed! 100%")
 
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts"""
