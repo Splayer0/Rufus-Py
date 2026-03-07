@@ -146,7 +146,7 @@ class FlashWorker(QThread):
             
             self.progress.emit("Flashing ISO to device...")
             self.progress_value.emit(5)
-            result = FlashUSB(self.iso_path, self.device_node, progress_cb=self.progress_value.emit)
+            result = FlashUSB(self.iso_path, self.device_node, progress_cb=self.progress_value.emit, status_cb=self.progress.emit)
             
             if result:
                 self.progress.emit("Flashing complete!")
@@ -794,8 +794,8 @@ class lufus(QMainWindow):
     
     def start_process(self):
         states.DN = self.combo_device.currentData() or ""
-        if states.image_option == 0: # WINDOWS NOT YET DONE
-            if states.currentflash == 0: # 0 is iso?
+        if states.image_option == 0: # WINDOWS
+            if states.currentflash == 0: # iso mode
                 if not getattr(states, 'iso_path', '') or not Path(states.iso_path).exists():
                     QMessageBox.warning(self, "No Image", "Please select a valid installation file first.")
                     return
@@ -818,6 +818,9 @@ class lufus(QMainWindow):
                 self.flash_worker.start()
 
                 self.log_message(f"Starting Windows flash process: {states.iso_path} -> {mount_path}")
+
+        elif states.image_option == 1: # woe usb
+            pass
 
         elif states.image_option == 1: # LINUX
             if states.currentflash == 0: # DD METHOD

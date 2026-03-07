@@ -15,7 +15,7 @@ def FormatFail():
 def unexpected():
     print(f"An unexpected error occurred")
 
-def FlashUSB(iso_path, raw_device, progress_cb=None) -> bool:
+def FlashUSB(iso_path, raw_device, progress_cb=None, status_cb=None) -> bool:
     print(raw_device)
     raw_device = re.sub(r"[0-9]+$","",raw_device)
     print(raw_device)
@@ -27,7 +27,7 @@ def FlashUSB(iso_path, raw_device, progress_cb=None) -> bool:
         
         if is_windows_iso(iso_path):
             print("Windows ISO detected")
-            return flash_windows(raw_device, iso_path, progress_cb=progress_cb)
+            return flash_windows(raw_device, iso_path, progress_cb=progress_cb, status_cb=status_cb)
             
         dd_args = [
             "dd",
