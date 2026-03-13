@@ -5,6 +5,7 @@ import os
 import shutil
 import time
 import urllib.request
+import glob
 
 # print("Python interpreter is interpreting comment. script will exit.")
 # sys.exit(1)
@@ -63,15 +64,16 @@ def install_grub(target_device)->bool:
         print("ERROR: This script must be run with sudo.")
         return False
 
-    # Avoid nvme devices
-    if "nvme" in target_device:
+    # Avoid nvme devices or soldered emmc(mmcblk)
+    if "nvme" in target_device  or "mmcblk" in target_device:
         print(f"Aborting: {target_device} is likely to a system drive.")
         return False
 
     # Cleanup to avoid "Device Busy"
     print(f"--- Cleaning up {target_device} ---")
-    subprocess.run(f"umount {target_device}* 2>/dev/null", shell=True, check=False)
-
+    for partition in glob.glob(f"{target_device}*"):
+        subprocess.run(['umount', partition], check=False)
+        
     # Partitioning Definition
     sfdisk_input = f"""
 label: gpt
@@ -89,7 +91,7 @@ unit: sectors
         subprocess.run(['sfdisk', target_device], input=sfdisk_input.encode(), check=True)
         
         # Determine partition names (handles /dev/sdaX vs /dev/nvme0n1pX)
-        sep = 'p' if target_device[-1].isdigit() else ''
+        sep = 'p' if 'nvme' in target_device else ''
         efi_part = f"{target_device}{sep}2"
         data_part = f"{target_device}{sep}3"
         
@@ -107,7 +109,7 @@ unit: sectors
             time.sleep(1)
         else:
             print(f"Error: {data_part} did not appear. Aborting.")
-            sys.exit(1)
+            return False
             
         # Formatting
         print(f"--- Formatting {efi_part} and {data_part} ---")
@@ -146,6 +148,7 @@ unit: sectors
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
             print(f"\nCommand failed: {e}")
             subprocess.run(['umount', efi_mount], check=False)  # cleanup on failure
+            subprocess.run(['umount', data_mount], check=False)
             return False    
         
 
