@@ -7,7 +7,6 @@ from lufus.drives import find_usb as fu
 from lufus.drives import states
 from lufus.writing.detect_windows import is_windows_iso
 from lufus.writing.flash_windows import flash_windows
-from lufus.writing.flash_woeusb import flash_woeusb
 
 
 def pkexecNotFound():
@@ -52,25 +51,13 @@ def FlashUSB(iso_path, raw_device, progress_cb=None, status_cb=None) -> bool:
 
         _status(f"Checking if image contains installation markers...")
         if is_windows_iso(iso_path):
-            _status("OS Installation media detected")
-            _status(f"Flash mode state: currentflash={states.currentflash}")
-
-            if states.currentflash == 0:
-                _status("Routing to flash_windows (ISO mode)")
-                return flash_windows(
-                    raw_device,
-                    iso_path,
-                    progress_cb=progress_cb,
-                    status_cb=status_cb,
-                )
-            elif states.currentflash == 1:
-                _status("Routing to flash_woeusb (WoeUSB mode)")
-                return flash_woeusb(
-                    raw_device,
-                    iso_path,
-                    progress_cb=progress_cb,
-                    status_cb=status_cb,
-                )
+            _status("OS Installation media detected, routing to flash_windows (ISO mode)")
+            return flash_windows(
+                raw_device,
+                iso_path,
+                progress_cb=progress_cb,
+                status_cb=status_cb,
+            )
         else:
             _status("Not a Windows ISO, will use dd for flashing")
 
