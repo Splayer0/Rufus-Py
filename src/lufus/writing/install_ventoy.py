@@ -3,22 +3,22 @@ import subprocess
 import sys
 import os
 import shutil
+import tempfile
 import time
 import urllib.request
+import urllib.error
 import glob
 
-# print("Python interpreter is interpreting comment. script will exit.")
-# sys.exit(1)
-# previous lines ensures python isn't broken.
-
 """
-   This  script installs grub in a way that lets users to copy distro iso to the usb device and 
+   This script installs grub in a way that lets users to copy distro iso to the usb device and
    boot of any copied iso's in the usb.
 """
 
 WIMBOOT_URL = "https://github.com/ipxe/wimboot/releases/latest/download/wimboot"
+WIMBOOT_TIMEOUT = 60
 
-def download_wimboot(dest_path)->bool:
+
+def download_wimboot(dest_path: str) -> bool:
     """
     Downloads wimboot, a bootloader necessary to boot into windows
 
@@ -31,30 +31,35 @@ def download_wimboot(dest_path)->bool:
     """
     print("--- Downloading wimboot ---")
     try:
-        urllib.request.urlretrieve(WIMBOOT_URL, dest_path)
+        # urlretrieve has no timeout; use urlopen+read so we can set one.
+        req = urllib.request.urlopen(WIMBOOT_URL, timeout=WIMBOOT_TIMEOUT)
+        with open(dest_path, "wb") as fh:
+            fh.write(req.read())
         print("wimboot downloaded successfully.")
         return True
+    except urllib.error.URLError as e:
+        print(f"WARNING: Could not download wimboot (network error): {e}")
+        print("Windows ISO booting will not work.")
+        return False
     except Exception as e:
         print(f"WARNING: Could not download wimboot: {e}")
         print("Windows ISO booting will not work.")
         return False
 
 
-
-
-def install_grub(target_device)->bool:
+def install_grub(target_device: str) -> bool:
     """
     Prepares the USB drive with a hybrid GRUB bootloader for multi-ISO booting.
-    
-    This function performs partitioning via sfdisk, formats partitions to 
+
+    This function performs partitioning via sfdisk, formats partitions to
     FAT32 and exFAT, and installs GRUB to both the MBR and EFI partitions.
-    
+
     Args:
         target_device: The system path to the disk (e.g., /dev/sdX).
-        
+
     Returns:
         bool: True if the installation succeeded, False otherwise.
-        
+
     Raises:
         subprocess.CalledProcessError: If a system command fails.
     """
@@ -65,7 +70,7 @@ def install_grub(target_device)->bool:
         return False
 
     # Avoid nvme devices or soldered emmc(mmcblk)
-    if "nvme" in target_device  or "mmcblk" in target_device:
+    if "nvme" in target_device or "mmcblk" in target_device:
         print(f"Aborting: {target_device} is likely to a system drive.")
         return False
 
@@ -73,7 +78,7 @@ def install_grub(target_device)->bool:
     print(f"--- Cleaning up {target_device} ---")
     for partition in glob.glob(f"{target_device}*"):
         subprocess.run(['umount', partition], check=False)
-        
+
     # Partitioning Definition
     sfdisk_input = f"""
 label: gpt
@@ -84,24 +89,28 @@ unit: sectors
 {target_device}2 : start=4096, size=204800, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 {target_device}3 : start=208896, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
     """
-    efi_mount = "/tmp/efi_prepare"
-    data_mount = "/tmp/data_prepare"
+
+    # Use unique temp dirs instead of hardcoded /tmp paths to avoid stale-mount collisions.
+    efi_mount = tempfile.mkdtemp(prefix="lufus_efi_")
+    data_mount = tempfile.mkdtemp(prefix="lufus_data_")
+    efi_mounted = False
+    data_mounted = False
+
     try:
         print(f"--- Partitioning {target_device} ---")
         subprocess.run(['sfdisk', target_device], input=sfdisk_input.encode(), check=True)
-        
-        # Determine partition names (handles /dev/sdaX vs /dev/nvme0n1pX)
-        sep = 'p' if 'nvme' in target_device else ''
+
+        # Determine partition names (handles /dev/sdaX vs /dev/nvme0n1pX and /dev/mmcblkXpY)
+        sep = 'p' if 'nvme' in target_device or 'mmcblk' in target_device else ''
         efi_part = f"{target_device}{sep}2"
         data_part = f"{target_device}{sep}3"
-        
+
         # Synchronization of kernel (Addressing the "No such file" error)
         print("Syncing with kernel...")
         subprocess.run(["partprobe", target_device], check=False)
         subprocess.run(["udevadm", "settle"], check=False)
         subprocess.run(["sync"], check=True)
-        
-        
+
         # Wait for device nodes to be created by udev
         for _ in range(10):
             if os.path.exists(data_part):
@@ -110,48 +119,50 @@ unit: sectors
         else:
             print(f"Error: {data_part} did not appear. Aborting.")
             return False
-            
+
         # Formatting
         print(f"--- Formatting {efi_part} and {data_part} ---")
         subprocess.run(['mkfs.vfat', '-F', '32', '-n', 'EFI', efi_part], check=True)
         subprocess.run(['mkfs.exfat', '-L', 'OS_PART', data_part], check=True)
 
-        #GRUB Installation
-        os.makedirs(efi_mount, exist_ok=True)
+        # GRUB Installation
         subprocess.run(['mount', efi_part, efi_mount], check=True)
-        
+        efi_mounted = True
+
         print("--- Installing GRUB (Legacy + UEFI) ---")
         subprocess.run(['grub-install', '--target=i386-pc', f'--boot-directory={efi_mount}/boot', target_device], check=True)
         subprocess.run(['grub-install', '--target=x86_64-efi', f'--efi-directory={efi_mount}', f'--boot-directory={efi_mount}/boot', '--removable'], check=True)
-    
-    
+
         # Copy grub.cfg
         script_dir = os.path.dirname(os.path.abspath(__file__))
         cfg_path = os.path.join(script_dir, "grub.cfg")
         if not os.path.exists(cfg_path):
             print("ERROR: grub.cfg not found next to the script.")
-            return False
-        shutil.copy(os.path.join(script_dir, "grub.cfg"), f"{efi_mount}/boot/grub/grub.cfg")
+            return False  # finally block will unmount because efi_mounted=True
+        shutil.copy(cfg_path, f"{efi_mount}/boot/grub/grub.cfg")
 
         # Download wimboot
-        os.makedirs(data_mount, exist_ok=True)
         subprocess.run(['mount', data_part, data_mount], check=True)
+        data_mounted = True
         download_wimboot(f"{data_mount}/wimboot")
-        subprocess.run(['umount', data_mount], check=True)  
 
-        
-        subprocess.run(['umount', efi_mount], check=True)
         print("\nSUCCESS: USB is ready. Copy .iso files to 'OS_PART'.")
         return True
-        
-        
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            print(f"\nCommand failed: {e}")
-            subprocess.run(['umount', efi_mount], check=False)  # cleanup on failure
-            subprocess.run(['umount', data_mount], check=False)
-            return False    
-        
 
+    except Exception as e:
+        print(f"\nCommand failed: {e}")
+        return False
+    finally:
+        if efi_mounted:
+            subprocess.run(['umount', efi_mount], check=False)
+        if data_mounted:
+            subprocess.run(['umount', data_mount], check=False)
+        # Clean up temp dirs regardless of outcome
+        for d in (efi_mount, data_mount):
+            try:
+                os.rmdir(d)
+            except OSError:
+                pass  # directory may be non-empty if unmount failed; ignore
 
 
 # this part is for testing the script

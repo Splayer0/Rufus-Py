@@ -31,6 +31,8 @@ class UsbMonitor(QObject):
         for device in self.context.list_devices(subsystem="block", DEVTYPE="disk"):
             if device.get("ID_BUS") == "usb":
                 node = device.device_node
+                if not node:
+                    continue
                 label = device.get("ID_FS_LABEL") or device.get("ID_MODEL") or node
                 vendor = device.get("ID_VENDOR") or "unknown vendor"
                 model = device.get("ID_MODEL") or "unknown model"
@@ -57,6 +59,10 @@ class UsbMonitor(QObject):
             return
 
         node = device.device_node
+        if not node:
+            print(f"UsbMonitor: ignoring event with no device_node (action={device.action})")
+            return
+
         action = device.action
         label = device.get("ID_FS_LABEL") or device.get("ID_MODEL") or node
         vendor = device.get("ID_VENDOR") or "unknown vendor"
@@ -67,10 +73,12 @@ class UsbMonitor(QObject):
             f"vendor={vendor!r}, model={model!r}"
         )
 
+        changed = False
         if action == "add":
             self.devices[node] = label
             print(f"UsbMonitor: device added: {node} ({label})")
             self.device_added.emit(node)
+            changed = True
         elif action == "remove":
             if node in self.devices:
                 removed_label = self.devices.pop(node)
@@ -78,7 +86,9 @@ class UsbMonitor(QObject):
                     f"UsbMonitor: device removed: {node} (was labeled {removed_label!r})"
                 )
                 self.device_removed.emit(node)
+                changed = True
             else:
                 print(f"UsbMonitor: remove event for unknown node {node}, ignoring")
 
-        self.device_list_updated.emit(self.devices)
+        if changed:
+            self.device_list_updated.emit(self.devices)

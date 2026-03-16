@@ -7,13 +7,13 @@ def _read_iso_label(iso_path: str) -> str:
         with open(iso_path, "rb") as f:
             f.seek(32808)
             return f.read(32).decode("ascii", errors="replace").strip()
-    except Exception:
+    except OSError:
         return ""
 
 
 def _label_is_windows(label: str) -> bool:
     label = label.upper()
-    if label.startswith("WIN") or label.startswith("WINDOWS"):
+    if label.startswith("WIN"):
         return True
     if label == "ESD-ISO":
         return True
@@ -81,7 +81,7 @@ def is_windows_iso(iso_path: str) -> bool:
         )
         if _label_is_windows(blkid_label):
             print(
-                f"Windows detection: Windows label match -> Windows ISO confirmed via blkid"
+                "Windows detection: Windows label match -> Windows ISO confirmed via blkid"
             )
             return True
         print("Windows detection: label does not match Windows patterns")
