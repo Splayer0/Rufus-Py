@@ -3,15 +3,15 @@ import os
 import subprocess
 
 
-def GetUSBInfo(usb_path: str) -> dict:  # [ANNOTATION] Add type hint to parameter.
+def GetUSBInfo(usb_path: str) -> dict:
     try:
         normalized_usb_path = os.path.normpath(usb_path)
 
-        for part in psutil.disk_partitions(all=True):  # [ANNOTATION] Pass all=True for consistency with find_usb/check_file_sig; avoids missing bind-mounted USB volumes.
+        for part in psutil.disk_partitions(all=True):
             if os.path.normpath(part.mountpoint) == normalized_usb_path:
                 device_node = part.device
                 break
-        else:  # [ANNOTATION] Use for/else to eliminate the separate device_node=None initialisation and post-loop None check.
+        else:
             print(f"Could not find device node for USB path: {usb_path}")
             return {}
 
@@ -21,7 +21,7 @@ def GetUSBInfo(usb_path: str) -> dict:  # [ANNOTATION] Add type hint to paramete
             timeout=5,
         ).strip()
 
-        usb_size = int(size_output) if size_output.isdigit() else 0  # [ANNOTATION] Inline the digit check; avoids a print on a zero-size result that is handled below.
+        usb_size = int(size_output) if size_output.isdigit() else 0
         if not size_output.isdigit():
             print(f"Warning: could not parse device size: {size_output!r}")
 
@@ -37,11 +37,11 @@ def GetUSBInfo(usb_path: str) -> dict:  # [ANNOTATION] Add type hint to paramete
         usb_info = {
             "device_node": device_node,
             "label": label,
-            "mount_path": normalized_usb_path,  # [ANNOTATION] Return the normalised path so callers comparing with normpath() results get a consistent value.
+            "mount_path": normalized_usb_path,
         }
         print(f"USB Info: {usb_info}")
         return usb_info
-    except subprocess.TimeoutExpired as e:  # [ANNOTATION] Catch TimeoutExpired explicitly before the broad Exception so the error message is informative.
+    except subprocess.TimeoutExpired as e:
         print(f"Timed out getting USB info for {usb_path}: {e}")
         return {}
     except PermissionError:
