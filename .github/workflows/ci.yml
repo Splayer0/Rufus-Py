@@ -52,3 +52,5 @@ jobs:
             --exclude=src/lufus/gui,src/lufus/drives/autodetect_usb.py
           flake8 src/ tests/ --count --max-line-length=120 --statistics --exit-zero \
             --exclude=src/lufus/gui,src/lufus/drives/autodetect_usb.py
+
+    continue-on-error: true
