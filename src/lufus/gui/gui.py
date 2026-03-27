@@ -461,7 +461,17 @@ class FlashWorker(QThread):
             elif image_option == 0:  # Windows
                 if flash_mode == 0:
                     # iso mode for microslop windows
+                    # passing user selected filesystem
+                    if states.currentFS == 0:
+                      scheme=PartitionScheme.WINDOWS_NTFS
+                    elif states.currentFS == 1:
+                      scheme=PartitionScheme.SIMPLE_FAT32
+                    elif states.currentFS == 2:
+                      scheme=PartitionScheme.WINDOWS_EXFAT
+                    else:
+                      scheme=PartitionScheme.LINUX
                     success = FlashUSB(iso_path, device_node,
+                                       scheme,
                                        progress_cb=self.progress.emit,
                                        status_cb=self.status.emit)
                 else:
@@ -469,6 +479,7 @@ class FlashWorker(QThread):
             else:
                 # other flash modes (Linux, Other)
                 success = FlashUSB(iso_path, device_node,
+                                   PartitionScheme.LINUX,
                                    progress_cb=self.progress.emit,
                                    status_cb=self.status.emit)
 
