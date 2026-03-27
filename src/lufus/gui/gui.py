@@ -44,22 +44,23 @@ from PyQt6.QtCore import (
     QPropertyAnimation,
 )
 from PyQt6.QtGui import QFont, QFontDatabase, QIcon
+
 from lufus.drives import states
 from lufus.drives.autodetect_usb import UsbMonitor
 from lufus.lufus_logging import get_logger
-from lufus.writing.partition_scheme import PartitionScheme
+from lufus.gui.themes.icon_utils import svg_icon
 
 # themes live here :3
 THEME_DIR = Path(__file__).parent / 'themes'
 ASSETS_DIR = Path(__file__).parent / 'assets'
 
-
-def _load_icon(name: str) -> QIcon:
-    path = ASSETS_DIR / f"{name}.png"
-    if path.exists():
-        return QIcon(str(path))
-    return QIcon()
-
+ICONS = {
+    "about":    ASSETS_DIR / "icons" / "about.svg",
+    "settings": ASSETS_DIR / "icons" / "settings.svg",
+    "website":  ASSETS_DIR / "icons" / "website.svg",
+    "refresh":  ASSETS_DIR / "icons" / "refresh.svg",
+    "log":      ASSETS_DIR / "icons" / "log.svg",
+}
 
 def _find_resource_dir(name: str) -> Path | None:
     # look for resource directories like languages or themes
@@ -670,6 +671,17 @@ class lufus(QMainWindow):
         self._flat_theme = flat_theme
         style_sheet = template.format(**flat_theme)
         self.setStyleSheet(style_sheet)
+        if hasattr(self, "btn_icon1"):
+            self.apply_icons()
+
+    def apply_icons(self):
+        #svg shit recolor for themes
+        fg = self._flat_theme.get("colors_fg", "#000000")
+        self.btn_icon1.setIcon(svg_icon(ICONS["website"],  fg))
+        self.btn_icon2.setIcon(svg_icon(ICONS["about"],    fg))
+        self.btn_icon3.setIcon(svg_icon(ICONS["settings"], fg))
+        self.btn_icon4.setIcon(svg_icon(ICONS["log"],      fg))
+        self.btn_refresh.setIcon(svg_icon(ICONS["refresh"], fg))
 
     def create_header(self, text):
         # create section header with horizontal line :3
@@ -930,36 +942,32 @@ class lufus(QMainWindow):
         main_layout.addSpacing(S.px(10))
 
         # toolbar buttons
-        btn_icon1 = QToolButton()
-        btn_icon1.setIcon(_load_icon("website"))
-        btn_icon1.setText("" if (ASSETS_DIR / "website.png").exists() else "🌐")
-        btn_icon1.setToolTip(self._T.get("tooltip_website", "Website"))
-        btn_icon1.clicked.connect(self._open_url)
+        self.btn_icon1 = QToolButton()
+        self.btn_icon1.setText("")
+        self.btn_icon1.setToolTip(self._T.get("tooltip_website", "website"))
+        self.btn_icon1.clicked.connect(self._open_url)
 
-        btn_icon2 = QToolButton()
-        btn_icon2.setIcon(_load_icon("about"))
-        btn_icon2.setText("" if (ASSETS_DIR / "about.png").exists() else "ℹ")
-        btn_icon2.setToolTip(self._T.get("tooltip_about", "About"))
-        btn_icon2.clicked.connect(self.show_about)
+        self.btn_icon2 = QToolButton()
+        self.btn_icon2.setText("")
+        self.btn_icon2.setToolTip(self._T.get("tooltip_about", "about"))
+        self.btn_icon2.clicked.connect(self.show_about)
 
-        btn_icon3 = QToolButton()
-        btn_icon3.setIcon(_load_icon("settings"))
-        btn_icon3.setText("" if (ASSETS_DIR / "settings.png").exists() else "⚙")
-        btn_icon3.setToolTip(self._T.get("tooltip_settings", "Settings"))
-        btn_icon3.clicked.connect(self.show_settings)
+        self.btn_icon3 = QToolButton()
+        self.btn_icon3.setText("")
+        self.btn_icon3.setToolTip(self._T.get("tooltip_settings", "settings"))
+        self.btn_icon3.clicked.connect(self.show_settings)
 
-        btn_icon4 = QToolButton()
-        btn_icon4.setIcon(_load_icon("log"))
-        btn_icon4.setText("" if (ASSETS_DIR / "log.png").exists() else "📄")
-        btn_icon4.setToolTip(self._T.get("tooltip_log", "Log"))
-        btn_icon4.clicked.connect(self.show_log)
+        self.btn_icon4 = QToolButton()
+        self.btn_icon4.setText("")
+        self.btn_icon4.setToolTip(self._T.get("tooltip_log", "log"))
+        self.btn_icon4.clicked.connect(self.show_log)
 
         icons_layout = QHBoxLayout()
         icons_layout.setSpacing(S.px(5))
-        icons_layout.addWidget(btn_icon1)
-        icons_layout.addWidget(btn_icon2)
-        icons_layout.addWidget(btn_icon3)
-        icons_layout.addWidget(btn_icon4)
+        icons_layout.addWidget(self.btn_icon1)
+        icons_layout.addWidget(self.btn_icon2)
+        icons_layout.addWidget(self.btn_icon3)
+        icons_layout.addWidget(self.btn_icon4)
         icons_layout.addStretch()
 
         # start and cancel buttons :D
@@ -995,13 +1003,12 @@ class lufus(QMainWindow):
         # create refresh button for usb device list :3
         S = self._S
         size = S.px(25)
-        btn = QToolButton()
-        btn.setIcon(_load_icon("refresh"))
-        btn.setText("" if (ASSETS_DIR / "refresh.png").exists() else "🔄")
-        btn.setToolTip(self._T.get("tooltip_refresh", "Refresh"))
-        btn.setFixedSize(size, size)
-        btn.clicked.connect(self.refresh_usb_devices)
-        return btn
+        self.btn_refresh = QToolButton()
+        self.btn_refresh.setText("")
+        self.btn_refresh.setToolTip(self._T.get("tooltip_refresh", "refresh"))
+        self.btn_refresh.setFixedSize(size, size)
+        self.btn_refresh.clicked.connect(self.refresh_usb_devices)
+        return self.btn_refresh
 
     def _populate_device_combo(self):
         # populate device combobox with usb devices :D
