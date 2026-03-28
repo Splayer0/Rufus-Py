@@ -45,7 +45,7 @@ def _strip_partition_suffix(device: str) -> str:
     return device
 
 
-def FlashUSB(iso_path: str, raw_device: str,partition_scheme:PartitionScheme=PartitionScheme.SIMPLE_FAT32, progress_cb=None, status_cb=None) -> bool:
+def FlashUSB(iso_path: str, raw_device: str,scheme:PartitionScheme=PartitionScheme.SIMPLE_FAT32, progress_cb=None, status_cb=None) -> bool:
     def _status(msg: str) -> None:
         log.info(msg)
         if status_cb:
@@ -78,7 +78,7 @@ def FlashUSB(iso_path: str, raw_device: str,partition_scheme:PartitionScheme=Par
             return flash_windows(
                 raw_device,
                 iso_path,
-                partition_scheme,
+                scheme,
                 progress_cb=progress_cb,
                 status_cb=status_cb,
             )

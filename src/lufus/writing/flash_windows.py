@@ -10,6 +10,7 @@ from lufus.drives import states
 from lufus.lufus_logging import get_logger
 from lufus.writing.partition_scheme import PartitionScheme
 
+
 log = get_logger(__name__)
 
 
@@ -201,7 +202,7 @@ def _ensure_wimlib(status_cb=None) -> None:
             "sudo pacman -S wimlib  /  sudo apt install wimtools"
         )
             
-def flash_windows(device: str, iso: str, partition_scheme: PartitionScheme, progress_cb=None, status_cb=None) -> bool:
+def flash_windows(device: str, iso: str, scheme: PartitionScheme, progress_cb=None, status_cb=None) -> bool:
     if not re.match(r"^/dev/(sd[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+)$", device):
         raise ValueError(f"Invalid device path: {device}")
 
@@ -232,8 +233,8 @@ def flash_windows(device: str, iso: str, partition_scheme: PartitionScheme, prog
         _status(f"Wiping existing partition table on {device}...")
         run(["sudo", "wipefs", "-a", device])
 
-        _status(f"Creating partitions on {device} with scheme {partition_scheme.name}...")
-        partitions = create_partitions(device, partition_scheme)
+        _status(f"Creating partitions on {device} with scheme {scheme.name}...")
+        partitions = create_partitions(device, scheme)
         if not partitions:
             _status("flash_windows: partitioning failed")
             return False
@@ -249,31 +250,37 @@ def flash_windows(device: str, iso: str, partition_scheme: PartitionScheme, prog
         run(["sudo", "udevadm", "settle"])
         _emit(15)
 
-        # --- Step 3: Format partitions ---
-        if efi_part:
-            _status(f"Formatting {efi_part} as FAT32 with label BOOT...")
-            run(["sudo", "mkfs.vfat", "-F32", "-n", "BOOT", efi_part])
-
-        _status(f"Formatting {data_part} as {partition_scheme.name}...")
-        if partition_scheme == PartitionScheme.WINDOWS_NTFS:
+        # --- Step 3: Format partitions ---        
+        if scheme == PartitionScheme.WINDOWS_NTFS:
             ntfs_cmd = _find_ntfs_tool(status_cb=_status)
             if ntfs_cmd is None:
                 raise FileNotFoundError("mkfs.ntfs / mkntfs not found. Install ntfs-3g.")
+            _status(f"Formatting {data_part} as {scheme.name}...")
             run(["sudo", ntfs_cmd, "-f", "-L", "WINDOWS", data_part])
-        elif partition_scheme == PartitionScheme.WINDOWS_EXFAT:
+        elif scheme == PartitionScheme.WINDOWS_EXFAT:
+            _status(f"Formatting {data_part} as {scheme.name}...")
             run(["sudo", "mkfs.exfat", "-n", "WINDOWS", data_part])
-        elif partition_scheme == PartitionScheme.SIMPLE_FAT32:
+        elif scheme == PartitionScheme.SIMPLE_FAT32:
+            _status(f"Formatting {efi_part} as FAT32 with label WINDOWS...")
             run(["sudo", "mkfs.vfat", "-F32", "-n", "WINDOWS", data_part])
+
+        if efi_part and scheme in (PartitionScheme.WINDOWS_NTFS, PartitionScheme.WINDOWS_EXFAT):
+
+            uefi_ntfs_img = find_uefi_ntfs_img(status_cb=_status)
+            run(["sudo", "dd", f"if={uefi_ntfs_img}", f"of={efi_part}", "bs=1M", "status=none"])
+
         _emit(22)
 
         # --- Step 4: Mount target partitions and copy files ---
         with (
-            tempfile.TemporaryDirectory() as mount_efi,
+        
             tempfile.TemporaryDirectory() as mount_data,
         ):
-            if efi_part:
-                _status(f"Mounting {efi_part} -> {mount_efi}")
+            if efi_part and scheme == PartitionScheme.SIMPLE_FAT32:
+                mount_efi = tempfile.mkdtemp()
                 run(["sudo", "mount", efi_part, mount_efi])
+            else:
+                mount_efi=None
 
             _status(f"Mounting {data_part} -> {mount_data}")
             run(["sudo", "mount", data_part, mount_data])
@@ -302,7 +309,7 @@ def flash_windows(device: str, iso: str, partition_scheme: PartitionScheme, prog
                 FAT32_LIMIT = 4 * 1024**3  # 4 GiB
 
                 needs_split = (
-                    partition_scheme == PartitionScheme.SIMPLE_FAT32
+                    scheme == PartitionScheme.SIMPLE_FAT32
                     and wim_size > FAT32_LIMIT
                 )
 
@@ -310,22 +317,22 @@ def flash_windows(device: str, iso: str, partition_scheme: PartitionScheme, prog
                     _status(
                         f"install.wim is {wim_size / 1024**3:.2f} GiB — exceeds FAT32 4 GiB limit, "
                         f"will split with wimlib-imagex"
-    )
+                            )
                     # Copy everything except install.wim directly from the loop mount
                     top_level_items = [
-        i for i in os.listdir(iso_mount)
-        if i.lower() != "sources"
-    ]
+                        i for i in os.listdir(iso_mount)
+                            if i.lower() != "sources"
+                                        ]
                     items = [os.path.join(iso_mount, i) for i in top_level_items]
                     _copy_tree_with_progress(
-        src_items=items,
-        dst=mount_data,
-        total_bytes=extract_used,  # slight overcount, acceptable for progress
-        status_cb=_status,
-        progress_cb=_emit,
-        base_pct=22,
-        end_pct=60,
-    )
+                    src_items=items,
+                    dst=mount_data,
+                    total_bytes=extract_used,  # slight overcount, acceptable for progress
+                    status_cb=_status,
+                    progress_cb=_emit,
+                    base_pct=22,
+                    end_pct=60,
+                                            )
 
                     # Copy sources/ minus install.wim
                     src_sources = _find_path_case_insensitive(iso_mount, "sources")
@@ -378,7 +385,7 @@ def flash_windows(device: str, iso: str, partition_scheme: PartitionScheme, prog
 
                 _status(f"install.wim/esd on data partition: {wim_size / (1024**3):.2f} GiB")
                 # --- Step 6: Copy EFI boot files ---
-                if efi_part:
+                if efi_part and scheme == PartitionScheme.SIMPLE_FAT32:
                     _status("Copying EFI boot files to EFI partition...")
 
                     efi_src = _find_path_case_insensitive(iso_mount, "EFI")
@@ -426,9 +433,11 @@ def flash_windows(device: str, iso: str, partition_scheme: PartitionScheme, prog
                 raise
             finally:
                 _status("Unmounting target partitions...")
-                if efi_part:
+                if mount_efi:
                     subprocess.run(["sudo", "umount", mount_efi], capture_output=True)
+                    os.rmdir(mount_efi)
                 subprocess.run(["sudo", "umount", mount_data], capture_output=True)
+
                 _status("Unmount complete")
 
         _status("flash_windows: finished successfully, Windows USB is ready")
@@ -487,26 +496,37 @@ def create_partitions(drive: str, scheme: PartitionScheme) -> list[dict[str, str
     Unified function to partition a drive based on a selected PartitionScheme.
     Returns a list of created partition paths and their roles.
     """
-    # Define the sfdisk scripts for each enum case
-    scripts = {
-    PartitionScheme.WINDOWS_NTFS: (
-        "size=-2G, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7\n"  # NTFS Data (leaves 2G at end)
-        "size=1G, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B\n"   # EFI
-    ),
-    PartitionScheme.WINDOWS_EXFAT: (
-        "size=-2G, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7\n"  # exFAT Data
-        "size=1G, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B\n"   # EFI
-    ),
-    PartitionScheme.SIMPLE_FAT32: (
-        "type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7\n"            # Single FAT32 (unchanged)
-    )
-}
-
-    script = scripts.get(scheme)
-    if not script:
-        raise ValueError(f"Invalid partition scheme: {scheme}")
 
     try:
+        total_sectors = _get_disk_size_sectors(drive)
+        sectors_per_mib = 1024 * 1024 // 512
+        efi_sectors = 2 * sectors_per_mib  # 2 MiB for EFI partition (more than enough for efi-ntfs)
+        alignment = 2048  # sectors (1 MiB alignment, standard)
+
+        # data starts at sector 2048 (standard GPT start)
+        data_start = alignment
+        data_end = total_sectors - efi_sectors - alignment  # leave room for EFI + alignment
+        data_size = data_end - data_start
+        # Define the sfdisk scripts for each enum case
+        scripts = {
+            PartitionScheme.WINDOWS_NTFS: (
+                f"start={data_start}, size={data_size}, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7\n"
+                f"size={efi_sectors}, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B\n"
+            ),
+            PartitionScheme.WINDOWS_EXFAT: (
+                f"start={data_start}, size={data_size}, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7\n"
+                f"size={efi_sectors}, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B\n"
+            ),
+            PartitionScheme.SIMPLE_FAT32: (
+                f"start={data_start}, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7\n"
+            )
+        }
+
+        script = scripts.get(scheme)
+        if not script:
+            raise ValueError(f"Invalid partition scheme: {scheme}")
+
+    
         # Apply the GPT table and script
         subprocess.run(["sudo", "sfdisk", "--label", "gpt", drive], 
                        input=script, text=True, check=True)
@@ -530,3 +550,34 @@ def create_partitions(drive: str, scheme: PartitionScheme) -> list[dict[str, str
     except subprocess.CalledProcessError as e:
         print(f"Error partitioning {drive}: {e}")
         return []
+
+
+def _get_disk_size_sectors(drive: str) -> int:
+    result = subprocess.run(
+        ["sudo", "blockdev", "--getsz", drive],
+        capture_output=True, text=True, check=True
+    )
+    return int(result.stdout.strip())  # returns 512-byte sectors
+
+UEFI_NTFS_URL = "https://github.com/pbatard/rufus/raw/master/res/uefi/uefi-ntfs.img"
+
+def find_uefi_ntfs_img(status_cb=None) -> str:
+    """Find uefi-ntfs.img next to this script, or download it if missing."""
+    candidate = os.path.join(os.path.dirname(__file__), "uefi-ntfs.img")
+    if os.path.exists(candidate):
+        return candidate
+
+    if status_cb:
+        status_cb(f"uefi-ntfs.img not found, downloading from {UEFI_NTFS_URL}...")
+
+    try:
+        import urllib.request
+        urllib.request.urlretrieve(UEFI_NTFS_URL, candidate)
+        if status_cb:
+            status_cb(f"Downloaded uefi-ntfs.img to {candidate}")
+        return candidate
+    except Exception as e:
+        raise FileNotFoundError(
+            f"uefi-ntfs.img not found and download failed: {e}\n"
+            f"Download manually from {UEFI_NTFS_URL} and place it next to this script."
+        )
