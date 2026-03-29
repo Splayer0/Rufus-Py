@@ -454,6 +454,9 @@ class FlashWorker(QThread):
                 self.progress.emit(50)
                 success = fo.dskformat(status_cb=self.status.emit)
                 if success:
+                    self.progress.emit(80)
+                    self.status.emit(self._T.get("status_remounting", "Remounting {part}...").format(part=part))
+                    fo.remount(part)
                     self.progress.emit(100)
                     self.status.emit(self._T.get("status_format_complete", "Format complete!"))
                 else:
@@ -1832,7 +1835,7 @@ class lufus(QMainWindow):
         owner = 'Hog185'
         repo = 'Lufus'
         url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
-        current_version = "v0.1.0a1"
+        current_version = states.version
         try:
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
