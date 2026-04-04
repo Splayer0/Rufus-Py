@@ -90,7 +90,7 @@ dlg_select_image_title,Sélectionner l'image disque
 dlg_select_image_filter,"Images disque (*.iso *.dmg *.img *.bin *.raw);;Tous les fichiers (*)"
 about_content,"Lufus est un programme d'écriture d'images disque écrit en Python pour Linux.
 Inspiré par l'outil original Rufus pour Windows.
-Version : 1.0.0
+Version : v1.0.0b1
 GitHub : github.com/hog185/lufus"
 about_subtitle,Outil de flash USB
 btn_close,Fermer
