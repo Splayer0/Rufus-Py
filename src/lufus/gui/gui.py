@@ -916,7 +916,7 @@ class lufus(QMainWindow):
         # filesystem cluster and flash option selectors :D
         self.lbl_fs = QLabel(self._T.get("lbl_file_system", "File System"))
         self.combo_fs = QComboBox()
-        self.all_fs_options = ["NTFS", "FAT32", "exFAT", "ext4", "UDF", "APFS", "HFS+", "ext2", "ext3", "Btrfs", "XFS", "ReFS", "ZFS"]
+        self.all_fs_options = ["NTFS", "FAT32", "exFAT", "ext4", "UDF", "APFS", "HFS+", "ext2", "ext3", "Btrfs", "XFS", "ZFS"]
         self.combo_fs.addItems(["NTFS", "FAT32", "exFAT"])
         self.combo_fs.currentTextChanged.connect(self.updateFS)
 
