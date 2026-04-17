@@ -45,10 +45,10 @@ $PYTHON -m PyInstaller src/lufus/__main__.py \
     --name lufus \
     --windowed \
     --paths src \
-    --import PyQt6.QtCore \
-    --import PyQt6.QtGui \
-    --import PyQt6.QtWidgets \
-    --import PyQt6.QtSvg \
+    --hidden-import PyQt6.QtCore \
+    --hidden-import PyQt6.QtGui \
+    --hidden-import PyQt6.QtWidgets \
+    --hidden-import PyQt6.QtSvg \
     --collect-all psutil \
     --hidden-import lufus.drives.autodetect_usb \
     --hidden-import lufus.drives.states \
