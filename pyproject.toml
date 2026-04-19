@@ -3,7 +3,7 @@
 project_name = "Lufus"
 bundle = "com.github.hog185"
 # keep version synced with version in [project]
-version = "1.0.0b1"
+version = "1.0.1b1"
 url = "https://github.com/Hog185/Lufus"
 license.file = "LICENSE"
 author = "Hog185"
@@ -137,7 +137,7 @@ is_test = true
 [project]
 name = "lufus"
 # keep version synced with version in [tool.briefcase]
-version = "1.0.0b1"
+version = "1.0.1b1"
 description = "Physical drive imaging and formatting utility written in Python"
 readme = "README.md"
 license = {text = "MIT"}
