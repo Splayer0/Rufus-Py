@@ -3,19 +3,16 @@ import sys
 import tempfile
 import json
 import os
-import csv
 import platform
 import getpass
 import time
-import urllib.request as _urllib_request
-import json as _json
+import requests
+import urllib.parse
+import webbrowser
 from typing import Dict, Any
 from packaging import version
 from platformdirs import user_config_dir
 from datetime import datetime
-from glob import glob
-import urllib.parse
-import webbrowser
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication,
@@ -30,8 +27,6 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QCheckBox,
     QMessageBox,
-    QDialog,
-    QTextEdit,
     QFileDialog,
     QLineEdit,
     QFrame,
@@ -42,453 +37,20 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import (
     Qt,
     QTimer,
-    QThread,
-    QObject,
-    pyqtSignal,
     QPropertyAnimation,
 )
-from PyQt6.QtGui import QFont, QFontDatabase, QIcon
+from PyQt6.QtGui import QIcon
 
 from lufus import state
 from lufus.drives.autodetect_usb import UsbMonitor
 from lufus.lufus_logging import get_logger
 from lufus.gui.themes.icon_utils import svg_icon
-
-# themes live here :3
-THEME_DIR = Path(__file__).parent / 'themes'
-ASSETS_DIR = Path(__file__).parent / 'assets'
-
-ICONS = {
-    "about":    ASSETS_DIR / "icons" / "about.svg",
-    "settings": ASSETS_DIR / "icons" / "settings.svg",
-    "website":  ASSETS_DIR / "icons" / "website.svg",
-    "refresh":  ASSETS_DIR / "icons" / "refresh.svg",
-    "log":      ASSETS_DIR / "icons" / "log.svg",
-}
-
-def _find_resource_dir(name: str) -> Path | None:
-    # look for resource directories like languages or themes
-    candidate = Path(__file__).parent / name
-    return candidate if candidate.is_dir() else None
-
-class Scale:
-    # base dpi for scaling calculations :D
-    BASE_DPI = 80.0
-    DESIGN_W = 750
-    DESIGN_H = 1050
-    REF_W = 2560
-    REF_H = 1440
-
-    def __init__(self, app: QApplication, factor: float = None):
-        # get screen info for scaling
-        screen = app.primaryScreen()
-        logical_dpi = screen.logicalDotsPerInch()
-        device_ratio = screen.devicePixelRatio()
-
-        if factor is not None:
-            # use custom factor if provided :3
-            self._factor = max(factor, 0.3)
-        else:
-            # calculate factor from dpi
-            self._factor = max(logical_dpi / self.BASE_DPI, 0.75)
-
-        print(
-            f"[Scale] logicalDPI={logical_dpi:.1f}  DevicePixelRatio={device_ratio:.2f}"
-            f"  → scale factor={self._factor:.3f}"
-        )
-
-    def f(self) -> float:
-        # return raw factor
-        return self._factor
-
-    def px(self, base_pixels: int | float) -> int:
-        # scale pixels based on factor
-        return max(1, round(base_pixels * self._factor))
-
-    def pt(self, base_points: int | float) -> int:
-        # scale font points based on factor :D
-        return max(6, round(base_points * self._factor))
-
-
-def load_translations(language="English"):
-    # load language csv files for localization
-    lang_dir = _find_resource_dir("languages")
-    t = {}
-    if lang_dir is None:
-        return t
-    lang_file = lang_dir / f"{language}.csv"
-    if lang_file.exists():
-        # read translations from csv :3
-        with open(lang_file, encoding="utf-8", newline="") as f:
-            for row in csv.DictReader(f):
-                t[row["key"]] = row["value"]
-    return t
-
-
-class StdoutRedirector:
-    def __init__(self, log_fn):
-        # redirect stdout to log window
-        self._log_fn = log_fn
-        self._real_stdout = sys.stdout
-        self._buf = ""
-
-    def write(self, text):
-        # write to real stdout and buffer for logging :D
-        self._real_stdout.write(text)
-        self._buf += text
-        while "\n" in self._buf:
-            # split by newlines and log each line
-            line, self._buf = self._buf.split("\n", 1)
-            line = line.rstrip()
-            if line:
-                self._log_fn(line)
-
-    def flush(self):
-        # flush the real stdout
-        self._real_stdout.flush()
-
-    def fileno(self):
-        # return real stdout file descriptor
-        return self._real_stdout.fileno()
-
-    def isatty(self):
-        # not a tty when redirected
-        return False
-
-
-class LogWindow(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # grab translations and scale from parent :3
-        self._T = parent._T if parent else {}
-        self._S: Scale = parent._S if parent else None
-        self.setWindowTitle(self._T.get("log_window_title", "Log Window"))
-
-        if self._S:
-            # apply scaled dimensions
-            self.resize(self._S.px(650), self._S.px(450))
-        else:
-            self.resize(650, 450)
-
-        layout = QVBoxLayout()
-        # create readonly text widget for log display
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        font_size = self._S.pt(9) if self._S else 9
-        self.log_text.setFont(QFont("Consolas", font_size))
-        self.log_text.setStyleSheet("background-color: palette(base); color: palette(text); border: 1px solid palette(mid);")
-        layout.addWidget(self.log_text)
-
-        # add copy and save buttons
-        btn_row = QHBoxLayout()
-        btn_copy = QPushButton(self._T.get("btn_copy_log", "Copy Log"))
-        btn_copy.setMinimumWidth(self._S.px(220) if self._S else 220)
-        btn_copy.clicked.connect(self._copy_log)
-        btn_save = QPushButton(self._T.get("btn_save_log", "Save Log"))
-        btn_save.setFixedWidth(self._S.px(150) if self._S else 150)
-        btn_save.clicked.connect(self._save_log)
-        btn_row.addWidget(btn_copy)
-        btn_row.addWidget(btn_save)
-        btn_row.addStretch()
-        layout.addLayout(btn_row)
-
-        self.setLayout(layout)
-
-    def closeEvent(self, event):
-        # hide instead of closing
-        event.ignore()
-        self.hide()
-
-    def _copy_log(self):
-        # copy log text to clipboard
-        QApplication.clipboard().setText(self.log_text.toPlainText())
-
-    def _save_log(self):
-        # show save dialog and write log to file
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            self._T.get("dlg_save_log_title", "Save Log"),
-            "lufus_log.txt",
-            "Text Files (*.txt);;All Files (*)",
-        )
-        if path:
-            try:
-                # write log contents to chosen file :D
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(self.log_text.toPlainText())
-            except OSError as e:
-                QMessageBox.critical(
-                    self,
-                    self._T.get("save_failed_title", "Save Failed"),
-                    f'{self._T.get("save_failed_body", "Failed to save log")}\n{e}',
-                )
-
-
-
-
-class AboutWindow(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # about dialog with app info :D
-        self.parent_window = parent
-        self._T = parent._T if parent else {}
-        self._S: Scale = parent._S if parent else None
-        self.setWindowTitle(self._T.get("about_window_title", "About"))
-
-        if self._S:
-            # apply scaled size
-            self.resize(self._S.px(480), self._S.px(360))
-        else:
-            self.resize(480, 360)
-
-        m = self._S.px(24) if self._S else 24
-        layout = QVBoxLayout()
-        layout.setContentsMargins(m, m, m, m)
-        layout.setSpacing(self._S.px(10) if self._S else 10)
-
-        # To the person who made this: Fuck you. — Saber.
-        flat = getattr(parent, '_flat_theme', {})
-        tool_pt = flat.get('fonts_tool', self._S.pt(9) if self._S else 9)
-        font_family = flat.get('fonts_family', '')
-        fg_color = flat.get('colors_fg', '')
-
-        # main title label fuh u
-        lbl_title = QLabel("Lufus")
-        lbl_title.setObjectName("aboutTitle")
-        lbl_title.setStyleSheet(f"font-family: {font_family}; font-size: {self._S.pt(20) if self._S else 20}pt; font-weight: bold; color: {fg_color};")
-        lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(lbl_title)
-
-        # subtitle label fuh u
-        lbl_sub = QLabel(self._T.get("about_subtitle", "USB Flash Tool"))
-        lbl_sub.setObjectName("aboutSubtitle")
-        lbl_sub.setStyleSheet(f"font-family: {font_family}; font-size: {tool_pt}pt; color: {fg_color};")
-        lbl_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(lbl_sub)
-
-        # horizontal fuh u
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setFrameShadow(QFrame.Shadow.Sunken)
-        layout.addWidget(sep)
-
-        # im lying ily (context text something area, whatever)
-        self.about_text = QTextEdit()
-        self.about_text.setReadOnly(True)
-        self.about_text.setObjectName("aboutContent")
-        self.about_text.setFrameShape(QFrame.Shape.NoFrame)
-        self.about_text.setStyleSheet(f"font-family: {font_family}; font-size: {tool_pt}pt; color: {fg_color};")
-        layout.addWidget(self.about_text, 1)
-
-        btn_row = QHBoxLayout()
-        #close button or smth, whatever
-        btn_close = QPushButton(self._T.get("btn_close", "Close"))
-        btn_close.setFixedWidth(self._S.px(90) if self._S else 90)
-        btn_close.clicked.connect(self.hide)
-        btn_row.addWidget(btn_close, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addLayout(btn_row)
-
-        self.setLayout(layout)
-
-class SettingsDialog(QDialog):
-    # signals for when settings change :D
-    language_changed = pyqtSignal(str)
-    theme_changed = pyqtSignal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # settings dialog for language and theme selection
-        self._T = parent._T if parent else {}
-        self._S: Scale = parent._S if parent else None
-        self.setWindowTitle(self._T.get("settings_window_title", "Settings"))
-        if self._S:
-            self.setFixedSize(self._S.px(750), self._S.px(450))
-        else:
-            self.setFixedSize(650, 450)
-        m = self._S.px(20) if self._S else 20
-        layout = QVBoxLayout()
-        layout.setContentsMargins(m, m, m, m)
-        layout.setSpacing(self._S.px(10) if self._S else 10)
-
-        # language selector :3
-        lbl_lang = QLabel(self._T.get("settings_label_language", "Language"))
-        lbl_lang.setStyleSheet("font-weight: normal;")
-        self.combo_language = QComboBox()
-        languages = self._detect_languages()
-        if languages:
-            # populate with available languages
-            self.combo_language.addItems(languages)
-            current_lang = state.language if hasattr(state, "language") else "English"
-            if current_lang in languages:
-                self.combo_language.setCurrentText(current_lang)
-        else:
-            self.combo_language.addItem(self._T.get("settings_no_languages", "No languages found"))
-            self.combo_language.setEnabled(False)
-        layout.addWidget(lbl_lang)
-        layout.addWidget(self.combo_language)
-
-        # theme selector :D
-        lbl_theme = QLabel(self._T.get("settings_label_theme", "Theme"))
-        lbl_theme.setStyleSheet("font-weight: normal;")
-        self.combo_theme = QComboBox()
-        builtin, custom = self._detect_themes()
-        # add builtin and custom themes
-        self.combo_theme.addItems(builtin)
-        self.combo_theme.addItems(custom)
-        current_theme = getattr(state, "Theme", "Default")
-        for i in range(self.combo_theme.count()):
-            # select current theme
-            if self.combo_theme.itemText(i) == current_theme:
-                self.combo_theme.setCurrentIndex(i)
-                break
-        layout.addWidget(lbl_theme)
-        layout.addWidget(self.combo_theme)
-
-        layout.addStretch()
-        # ok button to apply canges :3
-        btn_ok = QPushButton(self._T.get("btn_ok", "OK"))
-        btn_ok.clicked.connect(self._on_ok_clicked)
-        layout.addWidget(btn_ok)
-        self.setLayout(layout)
-
-    def _on_ok_clicked(self):
-        # emit signals when settings are changed :D
-        language = self.combo_language.currentText()
-        if language != self._T.get("settings_no_languages", "No languages found"):
-            self.language_changed.emit(language)
-        theme = self.combo_theme.currentText()
-        if not theme.startswith("──"):
-            self.theme_changed.emit(theme)
-        self.accept()
-
-    @staticmethod
-    def _detect_languages():
-        # find all available language csv files- ay carumba
-        lang_dir = _find_resource_dir("languages")
-        if lang_dir is None:
-            return []
-        return sorted(p.stem for p in lang_dir.glob("*.csv"))
-
-    @staticmethod
-    def _detect_themes():
-        # find builtin and user custom themes :3
-        builtin = sorted(
-            p.stem.replace('_theme', '')
-            for p in THEME_DIR.glob('*_theme.json')
-        )
-        user_themes_dir = Path(user_config_dir("Lufus")) / "themes"
-        user_themes_dir.mkdir(parents=True, exist_ok=True)
-        custom = sorted(
-            p.stem.replace('_theme', '')
-            for p in user_themes_dir.glob('*_theme.json')
-        )
-        return builtin, custom
-
-
-class VerifyWorker(QThread):
-    # worker thread for sha256 verification >:D
-    progress = pyqtSignal(str)
-    int_progress = pyqtSignal(int)
-    flash_done = pyqtSignal(bool)
-
-    def __init__(self, iso_path: str, expected_hash: str):
-        super().__init__()
-        # store paths for verification
-        self.iso_path = iso_path
-        self.expected_hash = expected_hash
-
-    def run(self):
-        # run verification in background thread :3
-        try:
-            import hashlib
-            p = Path(self.iso_path)
-            if not p.is_file():
-                self.progress.emit(f"Verification error: file not found: {self.iso_path}")
-                self.flash_done.emit(False)
-                return
-            file_size = p.stat().st_size
-            self.progress.emit(f"Verifying SHA256 checksum for {self.iso_path}...")
-            normalized = self.expected_hash.strip().lower()
-            sha256 = hashlib.sha256()
-            bytes_read = 0
-            with p.open("rb") as f:
-                for chunk in iter(lambda: f.read(1024 * 1024), b""):
-                    sha256.update(chunk)
-                    bytes_read += len(chunk)
-                    pct = min(int(bytes_read * 100 / file_size), 99) if file_size > 0 else 0
-                    self.int_progress.emit(pct)
-            calculated = sha256.hexdigest()
-            if calculated != normalized:
-                self.progress.emit(f"SHA256 mismatch: expected {normalized}, got {calculated}")
-            self.flash_done.emit(calculated == normalized)
-        except Exception as e:
-            self.progress.emit(f"Verification error: {str(e)}")
-            self.flash_done.emit(False)
-
-
-class FlashWorker(QThread):
-    # worker thread that spawns flash_worker.py subprocess
-    progress = pyqtSignal(int)
-    status = pyqtSignal(str)
-    flash_done = pyqtSignal(bool)
-
-    def __init__(self, options: dict, t: dict):
-        super().__init__()
-        self.options = options
-        self._T = t
-        self._process = None
-
-    def run(self):
-        import tempfile, json, subprocess
-
-        # Write options to a temp file for the subprocess to read
-        opts_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-        json.dump(self.options, opts_file)
-        opts_file.close()
-
-        # Spawn flash_worker.py as subprocess
-        worker_script = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), '..', 'writing', 'flash_worker.py'
-        )
-        cmd = [sys.executable, worker_script, opts_file.name]
-
-        try:
-            self._process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, start_new_session=True
-            )
-
-            for line in self._process.stdout:
-                line = line.strip()
-                if not line:
-                    continue
-                if line.startswith("PROGRESS:"):
-                    try:
-                        self.progress.emit(int(line[9:]))
-                    except ValueError:
-                        pass
-                elif line.startswith("STATUS:"):
-                    self.status.emit(line[7:])
-
-            self._process.wait()
-            self.flash_done.emit(self._process.returncode == 0)
-        except Exception as e:
-            self.status.emit(self._T.get("status_flash_error", "Flash error: {error}").format(error=e))
-            self.flash_done.emit(False)
-        finally:
-            try:
-                os.unlink(opts_file.name)
-            except OSError:
-                pass
-
-    def terminate(self):
-        if self._process and self._process.poll() is None:
-            import signal
-            try:
-                os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                self._process.terminate()
-        super().terminate()
+from lufus.gui.constants import THEME_DIR, ASSETS_DIR, ICONS
+from lufus.gui.scale import Scale
+from lufus.gui.i18n import load_translations
+from lufus.gui.redirector import StdoutRedirector
+from lufus.gui.dialogs import LogWindow, AboutWindow, SettingsDialog
+from lufus.gui.workers import FlashWorker, VerifyWorker
 
 # log level mapping for colors and methods
 _LOG_LEVELS = {
@@ -501,7 +63,39 @@ _LOG_LEVELS = {
 }
 
 
-class LufusWindow(QMainWindow):
+class BackgroundWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._bg_pixmap = None
+
+    def set_background(self, image_path):
+        # load and cache bg pixmap :3
+        if image_path and Path(image_path).is_file():
+            from PyQt6.QtGui import QPixmap
+            self._bg_pixmap = QPixmap(str(image_path))
+        else:
+            self._bg_pixmap = None
+        self.update()
+
+    def paintEvent(self, event):
+        if self._bg_pixmap and not self._bg_pixmap.isNull():
+            from PyQt6.QtGui import QPainter
+            painter = QPainter(self)
+            # scale to fill widget keeping aspect ratio, centre-cropped :D
+            scaled = self._bg_pixmap.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            x = (self.width() - scaled.width()) // 2
+            y = (self.height() - scaled.height()) // 2
+            painter.drawPixmap(x, y, scaled)
+            painter.end()
+        else:
+            super().paintEvent(event)
+
+
+class lufus(QMainWindow):
     def __init__(self, usb_devices=None, scale: Scale = None):
         super().__init__()
         # main window initialization :3
@@ -516,6 +110,19 @@ class LufusWindow(QMainWindow):
         # load translations :D
         self.current_language = state.language
         self._T = load_translations(self.current_language)
+
+        # restore theme from env when relaunched as root via pkexec :3
+        env_theme = os.environ.get("LUFUS_THEME", "")
+        if env_theme:
+            states.theme = env_theme
+
+        # load persisted theme from config when not set via env :3
+        if not getattr(states, "theme", ""):
+            try:
+                _theme_cfg = Path(user_config_dir("Lufus")) / "active_theme"
+                states.theme = _theme_cfg.read_text(encoding="utf-8").strip()
+            except Exception:
+                pass
 
         self.setWindowTitle(self._T.get("window_title", "lufus"))
 
@@ -545,6 +152,8 @@ class LufusWindow(QMainWindow):
 
         self._flash_start_time = None
         self._flash_total_bytes = 0
+        self._last_progress_pct = 0
+        self._speed_samples = []
 
         # redirect stdout to log :D
         sys.stdout = StdoutRedirector(self.log_message)
@@ -564,6 +173,11 @@ class LufusWindow(QMainWindow):
         self._clipboard_timer = QTimer(self)
         self._clipboard_timer.timeout.connect(self._check_clipboard)
         self._clipboard_timer.start(500)
+
+        # periodic speed/eta refresh independent of progress signal frequency
+        self._speed_timer = QTimer(self)
+        self._speed_timer.timeout.connect(self._tick_speed_eta)
+        self._speed_timer.setInterval(400)
 
         # log startup info :D
         self.log_message(f"lufus started (version: {state.version})")
@@ -616,29 +230,30 @@ class LufusWindow(QMainWindow):
         S = self._S
         APP_NAME = "Lufus"
         theme_dir = Path(__file__).parent / 'themes'
-        default_theme_path = theme_dir / 'default_theme.json'
         template_path = theme_dir / 'style_template.qss'
         user_config_dir_path = Path(user_config_dir(APP_NAME, roaming=True))
-        user_theme_path = user_config_dir_path / 'user_theme.json'
+
+        # resolve which theme folder to use :3
+        theme_name = getattr(states, "theme", "") or "default"
+        user_themes_dir = user_config_dir_path / "themes"
+        builtin_json = theme_dir / theme_name / f'{theme_name}_theme.json'
+        user_json = user_themes_dir / theme_name / f'{theme_name}_theme.json'
+        fallback_json = theme_dir / 'default' / 'default_theme.json'
+
+        if builtin_json.exists():
+            theme_json_path = builtin_json
+        elif user_json.exists():
+            theme_json_path = user_json
+        else:
+            theme_json_path = fallback_json
 
         try:
-            # load default theme json :D
-            with open(default_theme_path, 'r', encoding='utf-8') as fr:
+            # load active theme json :D
+            with open(theme_json_path, 'r', encoding='utf-8') as fr:
                 theme = json.load(fr)
         except FileNotFoundError:
             print("WARNING: no theme applied, json didn't load up in _apply_styles, gui.py.")
             return
-
-        if os.path.exists(user_theme_path):
-            try:
-                # merge user theme overrides
-                with open(user_theme_path, 'r', encoding='utf-8') as fr:
-                    user_theme = json.load(fr)
-                for category in ['colors', 'fonts', 'dimensions']:
-                    if category in user_theme and isinstance(user_theme[category], dict):
-                        theme[category].update(user_theme[category])
-            except Exception as e:
-                print(f"Error loading user theme: {e}")
 
         # check if gradients are enabled :3
         use_gradient = int(theme['dimensions'].get('use_gradient', 1))
@@ -646,6 +261,47 @@ class LufusWindow(QMainWindow):
         # keys that dont need scaling
         NO_SCALE_KEYS = {'use_gradient', 'btn_border_width', 'combo_border_width'}
         NO_SCALE_FONT_KEYS = {'family'}
+
+        # sensible defaults for every key the QSS template may reference :3
+        _DIM_DEFAULTS = {
+            'combo_pad_vertical':    4,
+            'combo_pad_horizontal':  10,
+            'combo_height':          28,
+            'combo_dropdown_width':  20,
+            'combo_radius':          6,
+            'btn_radius':            6,
+            'btn_pad_vertical':      6,
+            'btn_pad_horizontal':    14,
+            'btn_min_height':        28,
+            'btn_min_width':         80,
+            'btn_border_width':      1,
+            'combo_border_width':    1,
+            'check_indicator_size':  16,
+            'progress_radius':       4,
+            'progress_height':       20,
+            'tool_border_radius':    4,
+            'tool_padding':          4,
+            'tool_size':             28,
+            'use_gradient':          1,
+        }
+        _FONT_DEFAULTS = {
+            'family': 'sans-serif',
+            'base':   10,
+            'small':  9,
+            'header': 13,
+            'tool':   10,
+            'label':  10,
+        }
+        
+        theme.setdefault('dimensions', {})
+        theme.setdefault('fonts', {})
+        theme.setdefault('colors', {})
+
+        # merge defaults under any missing keys :D
+        for k, v in _DIM_DEFAULTS.items():
+            theme['dimensions'].setdefault(k, v)
+        for k, v in _FONT_DEFAULTS.items():
+            theme['fonts'].setdefault(k, v)
 
         # create scaled theme dict :D
         scaled_theme = {
@@ -670,6 +326,28 @@ class LufusWindow(QMainWindow):
         for category, subdict in scaled_theme.items():
             for key, val in subdict.items():
                 flat_theme[f"{category}_{key}"] = val
+
+        fg_color = theme['colors'].get('fg', '#000000')
+        arrow_size = S.px(10)
+
+        def _tinted_arrow_path(name: str) -> str:
+            src = ASSETS_DIR / 'icons' / name
+            if src.is_file():
+                try:
+                    svg_data = src.read_text(encoding='utf-8')
+                    svg_data = svg_data.replace('currentColor', fg_color)
+                    import hashlib
+                    sig = hashlib.md5(f"{src}{fg_color}".encode()).hexdigest()[:8]
+                    tmp_path = Path(tempfile.gettempdir()) / f"lufus_arrow_{sig}.svg"
+                    tmp_path.write_text(svg_data, encoding='utf-8')
+                    return tmp_path.as_posix()
+                except Exception:
+                    pass
+            return ""
+
+        flat_theme['meta_arrow_down'] = _tinted_arrow_path('down_arrow.svg')
+        flat_theme['meta_arrow_up']   = _tinted_arrow_path('up_arrow.svg')
+        flat_theme['dimensions_arrow_size'] = arrow_size
 
         try:
             # load qss template
@@ -710,7 +388,35 @@ class LufusWindow(QMainWindow):
         # apply template and set stylesheet
         self._flat_theme = flat_theme
         style_sheet = template.format(**flat_theme)
+
+        # look for background image in the theme's images/ folder :3
+        theme_images_dir = theme_json_path.parent / 'images'
+        bg_image_path = None
+        for ext in ('png', 'jpg', 'jpeg', 'webp'):
+            candidate = theme_images_dir / f'background_image.{ext}'
+            if candidate.is_file():
+                bg_image_path = candidate
+                break
+
+        # build final stylesheet, appending transparency rules if a bg image is active :3
+        if hasattr(self, "_bg_widget") and bg_image_path:
+            style_sheet += (
+                "QWidget#centralWidget, QScrollArea, QWidget#scrollContent"
+                " { background: transparent; }"
+            )
+
         QApplication.instance().setStyleSheet(style_sheet)
+
+        # push bg image to widget - paintEvent handles scaling :D
+        if hasattr(self, "_bg_widget"):
+            self._bg_widget.set_background(bg_image_path)
+
+        # force every widget to re-evaluate the new stylesheet :D
+        for widget in QApplication.instance().allWidgets():
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+
         if hasattr(self, "btn_icon1"):
             self.apply_icons()
 
@@ -765,7 +471,9 @@ class LufusWindow(QMainWindow):
         GROUP_SPACING = S.px(5)
 
         # create central widget with scroll area
-        central_widget = QWidget()
+        central_widget = BackgroundWidget()
+        central_widget.setObjectName("centralWidget")
+        self._bg_widget = central_widget
         self.setCentralWidget(central_widget)
         outer_layout = QVBoxLayout(central_widget)
         outer_layout.setContentsMargins(0, 0, 0, 0)
@@ -776,6 +484,7 @@ class LufusWindow(QMainWindow):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         scroll_content = QWidget()
+        scroll_content.setObjectName("scrollContent")
         main_layout = QVBoxLayout(scroll_content)
         main_layout.setSpacing(S.px(3))
         m = S.px(15)
@@ -1246,8 +955,6 @@ class LufusWindow(QMainWindow):
         anim.start()
         setattr(self, anim_attr, anim)
 
-
-
     def update_check_bad(self):
         # update bad blocks check setting and enable pass selector :3
         state.check_bad = 0 if self.chk_badblocks.isChecked() else 1
@@ -1441,22 +1148,19 @@ class LufusWindow(QMainWindow):
         dlg.exec()
 
     def apply_theme(self, theme_name):
-        # copy theme json to user config and apply :D
-        import shutil
-        builtin_path = THEME_DIR / f'{theme_name}_theme.json'
-        user_themes_dir = Path(user_config_dir("Lufus")) / "themes"
-        user_path = user_themes_dir / f'{theme_name}_theme.json'
-        dst = Path(user_config_dir("Lufus")) / 'user_theme.json'
-        src = builtin_path if builtin_path.exists() else user_path
-        if src.exists():
-            # copy to user config :3
-            shutil.copy(src, dst)
-            sudo_dst = Path("/root/.config/Lufus/user_theme.json")
+        # set active theme by name and re-apply styles :D
+        user_config_dir_path = Path(user_config_dir("Lufus"))
+        builtin_json = THEME_DIR / theme_name / f'{theme_name}_theme.json'
+        user_json = user_config_dir_path / "themes" / theme_name / f'{theme_name}_theme.json'
+        if builtin_json.exists() or user_json.exists():
+            states.theme = theme_name
+            # persist so it survives restarts without needing the env var :3
             try:
-                shutil.copy(src, sudo_dst)
+                _theme_cfg = user_config_dir_path / "active_theme"
+                _theme_cfg.parent.mkdir(parents=True, exist_ok=True)
+                _theme_cfg.write_text(theme_name, encoding="utf-8")
             except Exception:
                 pass
-            state.theme = theme_name
             self._apply_styles()
             self.log_message(f"Theme changed to: {theme_name}")
             if self.about_window and self.about_window.isVisible():
@@ -1640,6 +1344,7 @@ class LufusWindow(QMainWindow):
             # start verification worker :D
             self.btn_start.setEnabled(False)
             self.btn_cancel.setEnabled(True)
+            self.progress_bar.setRange(0, 0)
             self.progress_bar.setValue(0)
             self.progress_bar.setFormat(self._T.get("progress_verifying", "Verifying..."))
             self._flash_start_time = time.monotonic()
@@ -1647,9 +1352,9 @@ class LufusWindow(QMainWindow):
             # if you are reading this, fuck you
             self.verify_worker = VerifyWorker(state.iso_path, state.expected_hash)
             self.verify_worker.progress.connect(self.log_message)
-            self.verify_worker.int_progress.connect(self._update_speed_eta, Qt.ConnectionType.QueuedConnection)
-            self.verify_worker.int_progress.connect(self.progress_bar.setValue, Qt.ConnectionType.QueuedConnection)
+            self.verify_worker.int_progress.connect(self._on_progress, Qt.ConnectionType.QueuedConnection)
             self.verify_worker.flash_done.connect(self.on_verify_finished)
+            self._speed_timer.start()
             self.verify_worker.start()
         else:
             # skip verification and start flash :3
@@ -1705,6 +1410,7 @@ class LufusWindow(QMainWindow):
                 "XDG_RUNTIME_DIR":  os.environ.get("XDG_RUNTIME_DIR"),
                 "PATH":             os.environ.get("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"),
                 "PYTHONPATH":       os.environ.get("PYTHONPATH", ""),
+                "LUFUS_THEME":      getattr(states, "theme", ""),
             }
             env_args = ["env"]
             for key, value in gui_env.items():
@@ -1738,8 +1444,22 @@ class LufusWindow(QMainWindow):
             self.log_message("Relaunching as root via pkexec for flash operation...")
             os.execvp(pkexec_path, cmd)
         else:
-            # already root start flash worker
-            self._start_flash_with_options(options)
+            # already root start flash worker :D
+            iso_path = options.get("iso_path", "")
+            self._flash_start_time = time.monotonic()
+            self._flash_total_bytes = os.path.getsize(iso_path) if iso_path and Path(iso_path).exists() else 0
+            self.log_message(f"Starting flash thread: image_option={options['image_option']}, flash_mode={options['currentflash']}, device={options['device']}")
+            self.flash_worker = FlashWorker(options, self._T)
+            self.flash_worker.progress.connect(self._on_progress, Qt.ConnectionType.QueuedConnection)
+            self.flash_worker.status.connect(self._on_flash_status, Qt.ConnectionType.QueuedConnection)
+            self.flash_worker.flash_done.connect(self.on_flash_finished, Qt.ConnectionType.QueuedConnection)
+            self.flash_worker.start()
+            self.btn_start.setEnabled(False)
+            self.btn_cancel.setEnabled(True)
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setValue(0)
+            self._speed_timer.start()
+            self.statusBar.showMessage(self._T.get("status_flashing", "Flashing..."), 0)
 
     def _do_autoflash(self) -> None:
         # called after init when launched with flash now :3
@@ -1765,14 +1485,15 @@ class LufusWindow(QMainWindow):
         self._flash_total_bytes = os.path.getsize(iso_path) if iso_path and Path(iso_path).exists() else 0
         self.log_message(f"Starting flash: image_option={options['image_option']}, flash_mode={options['flash_mode']}, device={options['device']}")
         self.flash_worker = FlashWorker(options, self._T)
-        self.flash_worker.progress.connect(self.progress_bar.setValue, Qt.ConnectionType.QueuedConnection)
-        self.flash_worker.progress.connect(self._update_speed_eta, Qt.ConnectionType.QueuedConnection)
+        self.flash_worker.progress.connect(self._on_progress, Qt.ConnectionType.QueuedConnection)
         self.flash_worker.status.connect(self._on_flash_status, Qt.ConnectionType.QueuedConnection)
         self.flash_worker.flash_done.connect(self.on_flash_finished, Qt.ConnectionType.QueuedConnection)
         self.flash_worker.start()
         self.btn_start.setEnabled(False)
         self.btn_cancel.setEnabled(True)
+        self.progress_bar.setRange(0, 0)
         self.progress_bar.setValue(0)
+        self._speed_timer.start()
         self.statusBar.showMessage(self._T.get("status_flashing", "Flashing..."), 0)
 
     def _on_flash_status(self, msg):
@@ -1784,6 +1505,8 @@ class LufusWindow(QMainWindow):
         # handle flash completion :3
         if self.flash_worker is not None:
             self.flash_worker.wait()
+        # restore determinate mode in case we were in indeterminate :D
+        self.progress_bar.setRange(0, 100)
         if success:
             # flash succeeded :D
             self.progress_bar.setValue(100)
@@ -1810,43 +1533,58 @@ class LufusWindow(QMainWindow):
         self.statusBar.showMessage(self._T.get("status_ready", "Ready"), 0)
         self._clear_speed_eta()
 
+    def _on_progress(self, pct: int) -> None:
+        # route progress signal: switch out of indeterminate mode on first real value
+        if pct > 0 and self.progress_bar.maximum() == 0:
+            self.progress_bar.setRange(0, 100)
+        self._last_progress_pct = pct
+        self.progress_bar.setValue(pct)
+        self._update_speed_eta(pct)
+
+    def _tick_speed_eta(self) -> None:
+        # periodic timer tick to keep speed/eta display fresh between progress signals
+        self._update_speed_eta(self._last_progress_pct)
+
     def _update_speed_eta(self, pct: int) -> None:
         if self._flash_start_time is None or pct <= 0:
             return
-        elapsed = time.monotonic() - self._flash_start_time
+        now = time.monotonic()
+        elapsed = now - self._flash_start_time
         if elapsed < 0.5:
             return
         if self._flash_total_bytes > 0:
             bytes_done = int(pct / 100 * self._flash_total_bytes)
-            speed = bytes_done / elapsed
-            if speed > 0:
-                remaining = self._flash_total_bytes - bytes_done
-                eta_sec = remaining / speed
-                if speed >= 1024 * 1024:
-                    speed_str = f"{speed / (1024 * 1024):.1f} MB/s"
-                elif speed >= 1024:
-                    speed_str = f"{speed / 1024:.1f} KB/s"
-                else:
-                    speed_str = f"{speed:.0f} B/s"
-                if eta_sec >= 3600:
-                    eta_str = f"{int(eta_sec // 3600)}h {int((eta_sec % 3600) // 60)}m"
-                elif eta_sec >= 60:
-                    eta_str = f"{int(eta_sec // 60)}m {int(eta_sec % 60)}s"
-                else:
-                    eta_str = f"{int(eta_sec)}s"
-                self._lbl_speed_eta.setText(f"{speed_str}  ETA {eta_str}")
-                return
-        if elapsed >= 3600:
-            e_str = f"{int(elapsed // 3600)}h {int((elapsed % 3600) // 60)}m"
-        elif elapsed >= 60:
-            e_str = f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
-        else:
-            e_str = f"{int(elapsed)}s"
-        self._lbl_speed_eta.setText(f"Elapsed: {e_str}")
+            # rolling 8-second window for stable speed estimation
+            self._speed_samples.append((now, bytes_done))
+            cutoff = now - 8.0
+            self._speed_samples = [(t, b) for t, b in self._speed_samples if t >= cutoff]
+            if len(self._speed_samples) >= 2:
+                dt = self._speed_samples[-1][0] - self._speed_samples[0][0]
+                db = self._speed_samples[-1][1] - self._speed_samples[0][1]
+                if dt > 0 and db > 0:
+                    speed = db / dt
+                    remaining = self._flash_total_bytes - bytes_done
+                    eta_sec = remaining / speed
+                    if speed >= 1024 * 1024:
+                        speed_str = f"{speed / (1024 * 1024):.1f} MB/s"
+                    elif speed >= 1024:
+                        speed_str = f"{speed / 1024:.1f} KB/s"
+                    else:
+                        speed_str = f"{speed:.0f} B/s"
+                    if eta_sec >= 3600:
+                        eta_str = f"{int(eta_sec // 3600)}h {int((eta_sec % 3600) // 60)}m"
+                    elif eta_sec >= 60:
+                        eta_str = f"{int(eta_sec // 60)}m {int(eta_sec % 60)}s"
+                    else:
+                        eta_str = f"{int(eta_sec)}s"
+                    self._lbl_speed_eta.setText(f"{speed_str}  ETA {eta_str}")
 
     def _clear_speed_eta(self) -> None:
         self._flash_start_time = None
         self._flash_total_bytes = 0
+        self._last_progress_pct = 0
+        self._speed_samples = []
+        self._speed_timer.stop()
         self._lbl_speed_eta.setText("")
 
     def _apply_accessible_names(self) -> None:
@@ -1947,6 +1685,7 @@ class LufusWindow(QMainWindow):
             webbrowser.open("https://github.com/Hog185/Lufus/releases")
         else:
             self.log_message(f"download later button clicked", level="DEBUG")
+
 
 if __name__ == "__main__":
     # setup high dpi scaling :3

@@ -40,13 +40,23 @@ formal_name = "Lufus"
 description = "A rufus clone written in Python and designed to work with Linux."
 long_description = """Lufus is a physical drive imaging and formatting utility written in Python, inspired by Rufus, with the goal of delivering a greater experience for Linux users.
 """
-sources = ["src/lufus"]
-test_sources = ["tests"]
-requires = []  # runtime deps come from [project] dependencies automatically
-test_requires = ["pytest"]
-
-# macOS
-
+sources = [
+    "src/lufus",
+]
+test_sources = [
+    "tests",
+]
+requires = [
+    "psutil>=7.2",
+    "pyqt6>=6.8.0",
+    "pyudev>=0.24.4",
+    "requests",
+    "packaging",
+    "platformdirs>=4.2"
+]
+test_requires = [
+    "pytest",
+]
 [tool.briefcase.app.lufus.macOS]
 universal_build = true
 min_os_version = "12.0"  # PyQt6 6.8+ requires macOS 12
@@ -153,8 +163,22 @@ supported = false
 variant = "Alpha Testing 'FOV' Fork"
 commit_date = 2026-03-26
 is_test = true
-
-# Tooling
+[project]
+name = "lufus"
+# keep version synced with version in [tool.briefcase]
+version = "1.0.0b1"
+description = "Physical drive imaging and formatting utility written in Python"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = [
+    "psutil>=7.2.2",
+    "pyqt6>=6.10.2",
+    "pyudev>=0.24.4",
+    "requests",
+    "packaging",
+    "platformdirs>=4.9.4"
+]
 
 [tool.ruff]
 line-length = 120
