@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
-from lufus.drives import states
+from lufus import state as states
 from lufus.gui.constants import THEME_DIR, _find_resource_dir
 from lufus.gui.scale import Scale
 
