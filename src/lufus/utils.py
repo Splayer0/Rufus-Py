@@ -14,6 +14,7 @@ def elevate_privileges() -> None:
     env = os.environ.copy()
     if state.theme:
         env["LUFUS_THEME"] = state.theme
+    # Above function needs testing tho. We should make a thing to generate themes in a GUI, like Lufus Themer.
 
     # Preserve DISPLAY and XAUTHORITY for GUI apps under pkexec/sudo
     env_vars = ["DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "WAYLAND_DISPLAY", "PYTHONPATH", "LUFUS_THEME"]
@@ -29,14 +30,14 @@ def elevate_privileges() -> None:
         subprocess.run(cmd, check=True)
         sys.exit(0)
     except subprocess.CalledProcessError:
-        # User likely cancelled or pkexec failed
+        # User likely cancelled or pkexec failed, don't let user break stuff.
         pass
     except Exception as e:
         print(f"Elevation failed: {e}")
 
 
 def require_root() -> bool:
-    """Check if running as root. Returns True if root, False otherwise (with log warning)."""
+    # Check if running as root. Returns True if root, False otherwise (with log warning).
     if os.geteuid() == 0:
         return True
     import logging
@@ -66,7 +67,7 @@ def strip_partition_suffix(device: str) -> str:
 
 
 def get_mount_and_drive() -> tuple[str | None, str | None, dict]:
-    """Resolve the current USB mount path, device node, and mount dict."""
+    # Resolve the current USB mount path, device node, and mount dict.
     from lufus import state
     from lufus.drives.find_usb import find_usb, find_device_node
 
