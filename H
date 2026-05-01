@@ -5,4 +5,6 @@
 * Fix flashing logic
 * Fix pkexec/sudo
 * Fix ISO detection (Windows vs Linux vs ...)
+* Try to make themes work 
+* Test, test, test...
 * 

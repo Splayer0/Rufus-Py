@@ -13,6 +13,8 @@ log = get_logger(__name__)
 
 def _load_initial_theme():
     # Load theme before elevation so it can be passed via env
+    if getattr(state, "theme", ""):
+        return
     try:
         _theme_cfg = Path(user_config_dir("Lufus")) / "active_theme"
         if _theme_cfg.exists():

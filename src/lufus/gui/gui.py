@@ -1094,23 +1094,23 @@ class LufusWindow(QMainWindow):
             self.log_message(f"Image size: {file_size:,} bytes ({file_size / (1024**3):.2f} GiB)")
             self._detect_iso_and_update_ui(file_name)
 
-            def _detect_iso_and_update_ui(self, iso_path: str):
-            """Automatically detect ISO type and update UI selectors."""
-            from lufus.writing.windows.detect import is_windows_iso, is_linux_iso
+    def _detect_iso_and_update_ui(self, iso_path: str):
+        """Automatically detect ISO type and update UI selectors."""
+        from lufus.writing.windows.detect import is_windows_iso, is_linux_iso
 
-            if not iso_path.lower().endswith(".iso"):
-                return
+        if not iso_path.lower().endswith(".iso"):
+            return
 
-            self.log_message(f"Detecting ISO type for: {iso_path}...")
-            if is_windows_iso(iso_path):
-                self.log_message("Detected Windows ISO")
-                self.combo_image_option.setCurrentIndex(0)  # Windows
-            elif is_linux_iso(iso_path):
-                self.log_message("Detected Linux ISO")
-                self.combo_image_option.setCurrentIndex(1)  # Linux
-            else:
-                self.log_message("Unknown ISO type, defaulting to Other")
-                self.combo_image_option.setCurrentIndex(2)  # Other
+        self.log_message(f"Detecting ISO type for: {iso_path}...")
+        if is_windows_iso(iso_path):
+            self.log_message("Detected Windows ISO")
+            self.combo_image_option.setCurrentIndex(0)  # Windows
+        elif is_linux_iso(iso_path):
+            self.log_message("Detected Linux ISO")
+            self.combo_image_option.setCurrentIndex(1)  # Linux
+        else:
+            self.log_message("Unknown ISO type, defaulting to Other")
+            self.combo_image_option.setCurrentIndex(2)  # Other
 
     def show_log(self):
         # show log window with all entries :D

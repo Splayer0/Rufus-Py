@@ -16,13 +16,17 @@ def elevate_privileges() -> None:
         env["LUFUS_THEME"] = state.theme
 
     # Preserve DISPLAY and XAUTHORITY for GUI apps under pkexec/sudo
-    for var in ["DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "WAYLAND_DISPLAY"]:
-        if var in os.environ:
-            env[var] = os.environ[var]
-
-    cmd = ["pkexec", sys.executable] + sys.argv
+    env_vars = ["DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "WAYLAND_DISPLAY", "PYTHONPATH", "LUFUS_THEME"]
+    
+    cmd = ["pkexec", "env"]
+    for var in env_vars:
+        val = os.environ.get(var) or env.get(var)
+        if val:
+            cmd.append(f"{var}={val}")
+    
+    cmd += [sys.executable] + sys.argv
     try:
-        subprocess.run(cmd, env=env, check=True)
+        subprocess.run(cmd, check=True)
         sys.exit(0)
     except subprocess.CalledProcessError:
         # User likely cancelled or pkexec failed
