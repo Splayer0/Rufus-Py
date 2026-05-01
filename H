@@ -1,0 +1,7 @@
+* Add Nuitka
+* Add downloader
+* Add more FS
+* Fix FS options
+* Fix flashing logic
+* Fix pkexec/sudo
+* 
