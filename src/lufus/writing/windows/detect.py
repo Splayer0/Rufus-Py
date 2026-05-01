@@ -89,27 +89,30 @@ def is_windows_iso(iso_path: str) -> bool:
         log.error("Windows detection: blkid error: %s: %s", type(e).__name__, e)
 
 def is_linux_iso(iso_path: str) -> bool:
-    """Detect if an ISO is a Linux distribution."""
+    """Detect if an ISO is a Linux distribution by looking for bootloader and kernel markers."""
     log.info("Linux detection: checking %s", iso_path)
     try:
-        # Check for common Linux markers in the ISO using 7z
+        # Use 7z to list only top-level and boot-related directories/files, which is faster
         result = subprocess.run(["7z", "l", iso_path], capture_output=True, text=True, timeout=15)
         if result.returncode == 0:
-            files = result.stdout.lower()
-            linux_markers = [
-                "/isolinux/",
-                "/boot/grub/",
-                "/arch/",
-                "/ubuntu/",
-                "/debian/",
-                "/fedora/",
+            content = result.stdout.lower()
+            # Focus on definitive markers for Linux boot media
+            markers = [
+                "isolinux/",
+                "boot/grub/",
+                "boot/efi/",
+                "efi/boot/",
+                "arch/",
+                "casper/",  # Ubuntu/Debian live
+                "live/",    # Debian/Arch live
                 "vmlinuz",
                 "initrd",
             ]
-            for marker in linux_markers:
-                if marker in files:
+            for marker in markers:
+                if marker in content:
                     log.info("Linux detection: found marker %r -> Linux ISO confirmed", marker)
                     return True
+            log.info("Linux detection: no Linux markers found")
     except Exception as e:
         log.error("Linux detection error: %s", e)
 
