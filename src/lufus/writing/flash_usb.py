@@ -4,7 +4,7 @@ import shlex
 import subprocess
 from lufus.utils import strip_partition_suffix
 from lufus.writing.check_file_sig import check_iso_signature
-from lufus.writing.windows.detect import detect_iso_type, IsoType
+from lufus.writing.windows.detect import detect_iso_type, IsoType, is_windows_iso
 from lufus.writing.windows.flash import flash_windows
 from lufus.lufus_logging import get_logger
 from lufus.writing.partition_scheme import PartitionScheme
@@ -33,17 +33,20 @@ def flash_usb(
 
     _status(f"flash_usb called: iso={iso_path}, device={device}")
 
-    # Validate device path before any operation — prevents accidental writes to
-    # system disks if a bad options file or UI bug passes a wrong path.
-    if not re.match(r"^/dev/(sd[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+)$", device):
-        log.error("flash_usb: invalid device path %r — aborting", device)
-        _status(f"Flash aborted: invalid device path {device!r}")
-        return False
-
+    # Strip any partition suffix first (e.g. /dev/nvme0n1p1 -> /dev/nvme0n1,
+    # /dev/sdb1 -> /dev/sdb) so that validation operates on the whole-disk path.
     original_device = device
     device = strip_partition_suffix(device)
     if device != original_device:
         _status(f"Stripped partition suffix: {original_device} -> {device}")
+
+    # Validate the (already-stripped) device path before any operation —
+    # prevents accidental writes to system disks if a bad options file or
+    # UI bug passes a wrong path.
+    if not re.match(r"^/dev/(sd[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+)$", device):
+        log.error("flash_usb: invalid device path %r — aborting", device)
+        _status(f"Flash aborted: invalid device path {device!r}")
+        return False
 
     try:
         iso_size = os.path.getsize(iso_path)
@@ -60,8 +63,7 @@ def flash_usb(
             _status(f"Not an ISO file ({os.path.basename(iso_path)}), skipping ISO signature check")
 
         _status("Checking if image contains installation markers...")
-        iso_type = detect_iso_type(iso_path)
-        if iso_type == IsoType.WINDOWS:
+        if is_windows_iso(iso_path):
             _status("Windows Installation media detected, routing to flash_windows (ISO mode)")
             return flash_windows(
                 device,
@@ -70,7 +72,9 @@ def flash_usb(
                 progress_cb=progress_cb,
                 status_cb=status_cb,
             )
-        elif iso_type == IsoType.LINUX:
+
+        iso_type = detect_iso_type(iso_path)
+        if iso_type == IsoType.LINUX:
             _status("Linux Installation media detected, will use dd for flashing")
         else:
             _status("Generic or unknown image, will use dd for flashing")

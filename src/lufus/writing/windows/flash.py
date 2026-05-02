@@ -550,6 +550,7 @@ _UEFI_NTFS_SHA256 = ""
 def _verify_sha256(path: str, expected: str) -> bool:
     """Return True if the SHA-256 of *path* matches *expected* (hex, case-insensitive)."""
     import hashlib
+
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
@@ -570,8 +571,7 @@ def find_uefi_ntfs_img(status_cb=None) -> str:
         if _UEFI_NTFS_SHA256:
             if not _verify_sha256(candidate, _UEFI_NTFS_SHA256):
                 raise FileNotFoundError(
-                    f"uefi-ntfs.img failed SHA-256 verification. "
-                    f"Re-bundle the file and update _UEFI_NTFS_SHA256."
+                    f"uefi-ntfs.img failed SHA-256 verification. Re-bundle the file and update _UEFI_NTFS_SHA256."
                 )
         return candidate
 
@@ -580,12 +580,12 @@ def find_uefi_ntfs_img(status_cb=None) -> str:
 
     if not _UEFI_NTFS_SHA256:
         log.warning(
-            "Downloading uefi-ntfs.img without a pinned hash — "
-            "set _UEFI_NTFS_SHA256 before shipping to production."
+            "Downloading uefi-ntfs.img without a pinned hash — set _UEFI_NTFS_SHA256 before shipping to production."
         )
 
     try:
         import urllib.request
+
         urllib.request.urlretrieve(UEFI_NTFS_URL, candidate)
         if status_cb:
             status_cb(f"Downloaded uefi-ntfs.img to {candidate}")

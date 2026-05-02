@@ -60,14 +60,17 @@ def unmount(drive: str = None) -> bool:
     log.info("Unmounting %s...", drive)
     for target in targets:
         try:
-            result = subprocess.run(["umount", "-l", target])
-            # exit 32 = "not mounted" on Linux — acceptable when clearing a drive
-            if result.returncode not in (0, 32):
-                log.error("umount -l %s exited with code %d", target, result.returncode)
-                unmount_fail()
-                return False
+            subprocess.run(["umount", "-l", target], check=True)
             time.sleep(0.5)
             log.info("Unmounted %s successfully.", target)
+        except subprocess.CalledProcessError as e:
+            # exit 32 = "not mounted" on Linux — acceptable when clearing a drive
+            if e.returncode == 32:
+                log.info("Unmounted %s (was already unmounted).", target)
+                continue
+            log.error("umount -l %s exited with code %d", target, e.returncode)
+            unmount_fail()
+            return False
         except Exception as e:
             log.error("(UMNTFUNC) Unexpected error type: %s — %s", type(e).__name__, e)
             log_unexpected_error()

@@ -56,12 +56,16 @@ def download_wimboot(dest_path: str) -> bool:
         if _WIMBOOT_SHA256:
             if not _verify_sha256(dest_path, _WIMBOOT_SHA256):
                 os.unlink(dest_path)
-                print("ERROR: wimboot SHA-256 verification failed — file deleted. "
-                      "Check the download source or update _WIMBOOT_SHA256.")
+                print(
+                    "ERROR: wimboot SHA-256 verification failed — file deleted. "
+                    "Check the download source or update _WIMBOOT_SHA256."
+                )
                 return False
         else:
-            print("WARNING: wimboot downloaded without hash verification. "
-                  "Set _WIMBOOT_SHA256 before shipping to production.")
+            print(
+                "WARNING: wimboot downloaded without hash verification. "
+                "Set _WIMBOOT_SHA256 before shipping to production."
+            )
 
         print("wimboot downloaded successfully.")
         return True
@@ -129,15 +133,20 @@ def install_grub(target_device: str) -> bool:
     for partition in glob.glob(f"{target_device}*"):
         subprocess.run(["umount", partition], check=False)
 
+    # Partition separator: NVMe and MMC block devices use 'p' between the
+    # disk name and the partition number (e.g. /dev/nvme0n1p1, /dev/mmcblk0p1).
+    # Standard SCSI/SATA/USB drives use no separator (e.g. /dev/sdb1).
+    sep = "p" if re.search(r"(nvme\d+n\d+|mmcblk\d+)$", target_device) else ""
+
     # Partitioning Definition
     sfdisk_input = f"""
 label: gpt
 device: {target_device}
 unit: sectors
 
-{target_device}1 : start=2048, size=2048, type=21686148-6449-6E6F-7444-6961676F6E61
-{target_device}2 : start=4096, size=204800, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
-{target_device}3 : start=208896, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
+{target_device}{sep}1 : start=2048, size=2048, type=21686148-6449-6E6F-7444-6961676F6E61
+{target_device}{sep}2 : start=4096, size=204800, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+{target_device}{sep}3 : start=208896, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
     """
 
     # Use unique temp dirs instead of hardcoded /tmp paths to avoid stale-mount collisions.
@@ -156,8 +165,8 @@ unit: sectors
         subprocess.run(["sync"], check=True)
 
         # Wait for device nodes to be created by udev
-        efi_part = f"{target_device}2"
-        data_part = f"{target_device}3"
+        efi_part = f"{target_device}{sep}2"
+        data_part = f"{target_device}{sep}3"
         for _ in range(10):
             if os.path.exists(data_part):
                 break

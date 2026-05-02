@@ -1687,9 +1687,7 @@ class LufusWindow(QMainWindow):
                 if is_newer:
                     self.log_message(f"New version found: {tag_name} > {current_version}", level="DEBUG")
                 else:
-                    self.log_message(
-                        f"Running latest release build: {tag_name} <= {current_version}", level="INFO"
-                    )
+                    self.log_message(f"Running latest release build: {tag_name} <= {current_version}", level="INFO")
                     return
             else:
                 self.log_message(f"Couldn't get latest release, response: {req.status}", level="WARNING")

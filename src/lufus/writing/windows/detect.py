@@ -27,10 +27,11 @@ log = get_logger(__name__)
 # IsoType enum
 # ---------------------------------------------------------------------------
 
+
 class IsoType(str, Enum):
     WINDOWS = "windows"
-    LINUX   = "linux"
-    OTHER   = "other"
+    LINUX = "linux"
+    OTHER = "other"
 
 
 # ---------------------------------------------------------------------------
@@ -40,11 +41,11 @@ class IsoType(str, Enum):
 # ISO 9660: sector 16 = byte 32768.  Within the PVD:
 #   byte  1– 5 : Standard Identifier "CD001"
 #   byte 40–71 : Volume Identifier (32 a-characters)
-_PVD_OFFSET        = 16 * 2048        # 32768
-_PVD_MAGIC_OFFSET  = _PVD_OFFSET + 1  # where "CD001" lives
-_PVD_MAGIC         = b"CD001"
-_PVD_LABEL_OFFSET  = _PVD_OFFSET + 40
-_PVD_LABEL_SIZE    = 32
+_PVD_OFFSET = 16 * 2048  # 32768
+_PVD_MAGIC_OFFSET = _PVD_OFFSET + 1  # where "CD001" lives
+_PVD_MAGIC = b"CD001"
+_PVD_LABEL_OFFSET = _PVD_OFFSET + 40
+_PVD_LABEL_SIZE = 32
 
 
 def _read_pvd_label(iso_path: str) -> str:
@@ -63,16 +64,49 @@ def _read_pvd_label(iso_path: str) -> str:
         return ""
 
 
+def _read_iso_label(iso_path: str) -> str:
+    """Read the ISO 9660 volume label at the fixed sector-16 offset.
+
+    Unlike _read_pvd_label this does not check the CD001 magic, making it
+    useful for unit tests that write a minimal label-only fixture.  Returns
+    an empty string on OSError (e.g. missing file) or when the file is too
+    small to contain a label.
+    """
+    try:
+        with open(iso_path, "rb") as f:
+            f.seek(_PVD_LABEL_OFFSET)
+            raw = f.read(_PVD_LABEL_SIZE)
+        if len(raw) < _PVD_LABEL_SIZE:
+            return ""
+        return raw.decode("ascii", errors="replace").strip()
+    except OSError as e:
+        log.error("detect: cannot read label from %s: %s", iso_path, e)
+        return ""
+
+
+def _label_is_windows(label: str) -> bool:
+    """Return True if *label* matches a known Windows ISO volume identifier.
+
+    Uses the pre-compiled _WIN_LABEL_RE regex.  Any label beginning with
+    "WIN" already covers all "WINDOWS…" variants, so no redundant prefix
+    check is needed.
+    """
+    return bool(_WIN_LABEL_RE.match(label))
+
+
 # ---------------------------------------------------------------------------
 # File-listing helpers — 7z first, isoinfo as fallback
 # ---------------------------------------------------------------------------
+
 
 def _list_with_7z(iso_path: str) -> "str | None":
     """Return the lowercased 7z file listing, or None on failure / not installed."""
     try:
         r = subprocess.run(
             ["7z", "l", iso_path],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         if r.returncode == 0:
             return r.stdout.lower()
@@ -98,13 +132,15 @@ def _list_with_isoinfo(iso_path: str) -> "str | None":
         # If the ISO has no RR, isoinfo falls back to ISO 9660 names gracefully.
         r = subprocess.run(
             ["isoinfo", "-f", "-R", "-i", iso_path],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         if r.returncode == 0:
             lines = []
             for line in r.stdout.splitlines():
                 line = line.strip().lstrip("/").lower()
-                line = re.sub(r";[0-9]+$", "", line)   # strip ;1 version suffix
+                line = re.sub(r";[0-9]+$", "", line)  # strip ;1 version suffix
                 lines.append(line)
             return "\n".join(lines)
         log.warning("detect: isoinfo exited %d", r.returncode)
@@ -139,10 +175,10 @@ _WIN_LABEL_RE = re.compile(
 # Files that exist ONLY in Windows installation media.
 # NOTE: EFI directories are deliberately absent — Windows ISOs also have efi/boot/.
 _WIN_FILE_MARKERS = [
-    "sources/install.wim",   # Windows setup image (retail / OEM)
-    "sources/install.esd",   # Windows setup image (ESD download)
-    "sources/install.swm",   # Split setup image (multi-disc)
-    "sources/boot.wim",      # Windows PE boot image
+    "sources/install.wim",  # Windows setup image (retail / OEM)
+    "sources/install.esd",  # Windows setup image (ESD download)
+    "sources/install.swm",  # Split setup image (multi-disc)
+    "sources/boot.wim",  # Windows PE boot image
 ]
 
 
@@ -177,34 +213,27 @@ _LINUX_FILE_MARKERS = [
     "isolinux/isolinux.cfg",
     "syslinux/syslinux.cfg",
     "syslinux/ldlinux.c32",
-
     # ---- GRUB config files — Linux-only for optical/USB media ----
     # Windows uses BCD / bootmgr; it never ships grub.cfg on install media.
     "boot/grub/grub.cfg",
     "boot/grub/i386-pc/",
     "grub/grub.cfg",
-
     # ---- Ubuntu / Kubuntu / Xubuntu / Mint (Casper live system) ----
     "casper/filesystem.squashfs",
     "casper/filesystem.manifest",
     "casper/vmlinuz",
-
     # ---- Debian / Kali / Tails / Parrot (live-boot) ----
     "live/filesystem.squashfs",
     "live/filesystem.manifest",
     "live/vmlinuz",
-
     # ---- Ubuntu / Debian installer marker ----
     ".disk/info",
-
     # ---- Arch Linux (specific sub-paths, not the broad "arch/" directory) ----
     "arch/pkglist.x86_64.txt",
     "arch/boot/x86_64/vmlinuz-linux",
-
     # ---- Fedora / RHEL / CentOS installer (Anaconda) ----
     "images/pxeboot/vmlinuz",
     ".discinfo",
-
     # ---- Generic kernel presence under known Linux-only directories ----
     "boot/vmlinuz",
     "boot/bzimage",
@@ -214,6 +243,7 @@ _LINUX_FILE_MARKERS = [
 # ---------------------------------------------------------------------------
 # Main detection entry point
 # ---------------------------------------------------------------------------
+
 
 def detect_iso_type(iso_path: str) -> IsoType:
     """Detect the OS family of an ISO image.
@@ -273,6 +303,7 @@ def detect_iso_type(iso_path: str) -> IsoType:
 # ---------------------------------------------------------------------------
 # Backward-compatible wrappers
 # ---------------------------------------------------------------------------
+
 
 def is_windows_iso(iso_path: str) -> bool:
     """Return True if iso_path is a Windows installation image."""
