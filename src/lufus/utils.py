@@ -3,7 +3,7 @@ import re
 
 
 def elevate_privileges() -> None:
-    # Relaunch the application with root privileges using pkexec. Might try to change it later, but I'll keep that fro now.
+    """Relaunch the application with root privileges using pkexec."""
     import sys
     import subprocess
     from lufus import state
@@ -14,8 +14,6 @@ def elevate_privileges() -> None:
     env = os.environ.copy()
     if state.theme:
         env["LUFUS_THEME"] = state.theme
-    # Above function needs testing tho. We should make a thing to generate themes in a GUI, like a Lufus Themer or smth.
-    # Just like GRUB Customizer or whatever it's called.
 
     # Preserve DISPLAY and XAUTHORITY for GUI apps under pkexec/sudo
     env_vars = ["DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "WAYLAND_DISPLAY", "PYTHONPATH", "LUFUS_THEME"]
@@ -38,7 +36,7 @@ def elevate_privileges() -> None:
 
 
 def require_root() -> bool:
-    # Check if running as root. Returns True if root, False otherwise (with log warning).
+    """Check if running as root. Returns True if root, False otherwise (with log warning)."""
     if os.geteuid() == 0:
         return True
     import logging
@@ -68,7 +66,7 @@ def strip_partition_suffix(device: str) -> str:
 
 
 def get_mount_and_drive() -> tuple[str | None, str | None, dict]:
-    # Resolve the current USB mount path, device node, and mount dict.
+    """Resolve the current USB mount path, device node, and mount dict."""
     from lufus import state
     from lufus.drives.find_usb import find_usb, find_device_node
 

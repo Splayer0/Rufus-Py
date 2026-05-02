@@ -1096,16 +1096,18 @@ class LufusWindow(QMainWindow):
 
     def _detect_iso_and_update_ui(self, iso_path: str):
         """Automatically detect ISO type and update UI selectors."""
-        from lufus.writing.windows.detect import is_windows_iso, is_linux_iso
+        from lufus.writing.windows.detect import detect_iso_type, IsoType
 
         if not iso_path.lower().endswith(".iso"):
             return
 
         self.log_message(f"Detecting ISO type for: {iso_path}...")
-        if is_windows_iso(iso_path):
+        iso_type = detect_iso_type(iso_path)
+
+        if iso_type == IsoType.WINDOWS:
             self.log_message("Detected Windows ISO")
             self.combo_image_option.setCurrentIndex(0)  # Windows
-        elif is_linux_iso(iso_path):
+        elif iso_type == IsoType.LINUX:
             self.log_message("Detected Linux ISO")
             self.combo_image_option.setCurrentIndex(1)  # Linux
         else:
