@@ -51,6 +51,7 @@ class FlashWorker(QThread):
     progress = pyqtSignal(int)
     status = pyqtSignal(str)
     flash_done = pyqtSignal(bool)
+    request_tweaks = pyqtSignal()
 
     def __init__(self, options: dict, t: dict):
         super().__init__()
