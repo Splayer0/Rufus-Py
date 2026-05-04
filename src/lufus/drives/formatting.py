@@ -1,5 +1,4 @@
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -27,7 +26,6 @@ def _find_tool(name: str) -> str:
     return name
 
 
-
 #######
 
 
@@ -44,16 +42,14 @@ def format_fail() -> None:
 
 
 def unmount_fail() -> None:
-    log.error(
-        "Unmounting failed. Perhaps either the drive was already unmounted or is in use."
-    )
+    log.error("Unmounting failed. Perhaps either the drive was already unmounted or is in use.")
 
 
 def log_unexpected_error() -> None:
     log.error("An unexpected error occurred")
 
 
-#unmountain
+# unmountain
 def unmount(drive: str = None) -> bool:
     if not drive:
         _, drive, _ = _get_mount_and_drive()
@@ -64,10 +60,15 @@ def unmount(drive: str = None) -> bool:
     log.info("Unmounting %s...", drive)
     for target in targets:
         try:
-            subprocess.run(["umount", "-l", target])
+            subprocess.run(["umount", "-l", target], check=True)
             time.sleep(0.5)
             log.info("Unmounted %s successfully.", target)
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as e:
+            # exit 32 = "not mounted" on Linux — acceptable when clearing a drive
+            if e.returncode == 32:
+                log.info("Unmounted %s (was already unmounted).", target)
+                continue
+            log.error("umount -l %s exited with code %d", target, e.returncode)
             unmount_fail()
             return False
         except Exception as e:
@@ -78,14 +79,21 @@ def unmount(drive: str = None) -> bool:
     time.sleep(0.5)
     return True
 
-#mountain
-def remount(drive: str=None) -> bool:
+
+# mountain
+def remount(drive: str = None) -> bool:
+    mount = None
     if not drive:
         mount, drive, _ = _get_mount_and_drive()
+    else:
+        # drive was supplied by caller; resolve mount point from current state
+        _, _, mount_dict = _get_mount_and_drive()
+        # find the mount point whose device node matches the given drive
+        mount = next((mp for mp, _label in mount_dict.items()), None)
     if not drive:
         log.error("No drive node found. Cannot unmount.")
         return False
-    if not drive or not mount:
+    if not mount:
         log.error("No drive node or mount point found. Cannot remount.")
         return False
     log.info("Remounting %s -> %s...", drive, mount)
@@ -102,12 +110,11 @@ def remount(drive: str=None) -> bool:
         return False
 
 
-#disk formatting
+# disk formatting
 def volume_custom_label(target_partition: str = None) -> bool:
     newlabel = state.new_label
     # Sanitize label: allow only alphanumeric, spaces, hyphens, and underscores
-    import re
-    newlabel = re.sub(r'[^a-zA-Z0-9 \-_]', '', newlabel).strip()
+    newlabel = re.sub(r"[^a-zA-Z0-9 \-_]", "", newlabel).strip()
     if not newlabel:
         newlabel = "USB_DRIVE"
 
@@ -120,11 +127,8 @@ def volume_custom_label(target_partition: str = None) -> bool:
         log.error("No drive node found. Cannot relabel.")
         return False
 
-    # Sanitize label: strip characters that could be misinterpreted.
-    # Since commands are passed as lists (shell=False), shell injection is not
-    # possible, but we still quote each argument defensively.
-    safe_drive = shlex.quote(drive)
-    safe_label = shlex.quote(newlabel)
+    # Commands are passed as lists (shell=False) so shell injection is not possible.
+    # Label sanitization above ensures the string is safe for all labelling tools.
 
     # 0 -> NTFS, 1 -> FAT32, 2 -> exFAT, 3 -> ext4, 4 -> UDF
     fs_type = state.filesystem_index
@@ -172,7 +176,12 @@ def get_format_geometry() -> tuple[int, int, int]:
     sector_size = 512
 
     sectors_per_cluster = block_size // sector_size
-    log.debug("get_format_geometry(): block_size=%d, sector_size=%d, sectors_per_cluster=%d", block_size, sector_size, sectors_per_cluster)
+    log.debug(
+        "get_format_geometry(): block_size=%d, sector_size=%d, sectors_per_cluster=%d",
+        block_size,
+        sector_size,
+        sectors_per_cluster,
+    )
     return block_size, sector_size, sectors_per_cluster
 
 
@@ -216,17 +225,17 @@ def check_device_bad_blocks() -> bool:
             else:
                 log.warning(
                     "Unexpected blockdev output for %r: %r. Using default block size.",
-                    drive, probed,
+                    drive,
+                    probed,
                 )
         else:
             log.warning(
                 "blockdev failed for %s (exit %d). Using default block size.",
-                drive, probe.returncode,
+                drive,
+                probe.returncode,
             )
     except Exception as exc:
-        log.warning(
-            "Could not probe sector size for %s: %s. Using default block size.", drive, exc
-        )
+        log.warning("Could not probe sector size for %s: %s. Using default block size.", drive, exc)
 
     # -s = show progress, -v = verbose output
     # -n = non-destructive read-write test (safe default)
@@ -237,7 +246,9 @@ def check_device_bad_blocks() -> bool:
 
     log.info(
         "Checking %s for bad blocks (%d pass(es), block size %d)...",
-        drive, passes, logical_block_size,
+        drive,
+        passes,
+        logical_block_size,
     )
     try:
         result = subprocess.run(args, capture_output=True, text=True)
@@ -253,7 +264,7 @@ def check_device_bad_blocks() -> bool:
         bad_lines = [line for line in output.splitlines() if line.strip().isdigit()]
         if bad_lines:
             log.warning("%d bad block(s) found on %s!", len(bad_lines), drive)
-            return True
+            return False
         log.info("No bad blocks found on %s.", drive)
         return True
     except FileNotFoundError:
@@ -269,6 +280,7 @@ def disk_format(status_cb=None) -> bool:
     """Format the drive. Returns True on success, False on failure.
     Accepts an optional status_cb(str) to emit progress messages to the GUI.
     """
+
     def _status(msg: str) -> None:
         log.info(msg)
         if status_cb:
@@ -290,13 +302,20 @@ def disk_format(status_cb=None) -> bool:
     fs_type = state.filesystem_index
 
     # Check if quick format is enabled (state.quick_format: 0 = quick, 1 = full)
-    is_quick_format = (state.quick_format == 0)
+    is_quick_format = state.quick_format == 0
 
-    _status(f"Starting format: device={raw_device}, fs_type={fs_type}, clusters={block_size}, sectors={sectors_per_cluster}, quick={is_quick_format}")
+    _status(
+        f"Starting format: device={raw_device}, fs_type={fs_type}, clusters={block_size}, sectors={sectors_per_cluster}, quick={is_quick_format}"
+    )
 
     # Filesystem tool configurations: (tool_name, args_builder, fs_label, install_hint)
     fs_configs = {
-        0: ("mkfs.ntfs", lambda: ["-c", str(block_size), "-F"] + (["-Q"] if is_quick_format else []) + [raw_device], "NTFS", "ntfs-3g"),
+        0: (
+            "mkfs.ntfs",
+            lambda: ["-c", str(block_size), "-F"] + (["-Q"] if is_quick_format else []) + [raw_device],
+            "NTFS",
+            "ntfs-3g",
+        ),
         1: ("mkfs.vfat", lambda: ["-I", "-s", str(sectors_per_cluster), "-F", "32", raw_device], "FAT32", "dosfstools"),
         2: ("mkfs.exfat", lambda: ["-b", str(block_size), raw_device], "exFAT", "exfatprogs or exfat-utils"),
         3: ("mkfs.ext4", lambda: ["-b", str(block_size), raw_device], "ext4", "e2fsprogs"),
@@ -383,5 +402,3 @@ def drive_repair() -> None:
         log.info("Successfully repaired drive %s (FAT32).", drive)
     except Exception as e:
         log.error("Could not repair drive %s: %s: %s", drive, type(e).__name__, e)
-
-

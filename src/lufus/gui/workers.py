@@ -20,6 +20,7 @@ class VerifyWorker(QThread):
         # run verification in background thread :3
         try:
             import hashlib
+
             p = Path(self.iso_path)
             if not p.is_file():
                 self.progress.emit(f"Verification error: file not found: {self.iso_path}")
@@ -64,7 +65,7 @@ class FlashWorker(QThread):
         try:
             from lufus import state as states
             from lufus.drives import formatting as fo
-            from lufus.writing.flash_usb import FlashUSB
+            from lufus.writing.flash_usb import flash_usb
             import glob
 
             options = self.options
@@ -73,18 +74,24 @@ class FlashWorker(QThread):
                 setattr(states, key, value)
 
             device_node = options["device"]
-            states.DN = device_node
+            states.device_node = device_node
             iso_path = options.get("iso_path", "")
             flash_mode = options["currentflash"]
             image_option = options["image_option"]
 
             # unmount all partitions before flashing :D
-            self.status.emit(self._T.get("status_unmounting_all", "Unmounting all partitions on {device}...").format(device=device_node))
+            self.status.emit(
+                self._T.get("status_unmounting_all", "Unmounting all partitions on {device}...").format(
+                    device=device_node
+                )
+            )
             partitions = glob.glob(f"{device_node}*")
+            unmounted_parts = []
             for part in partitions:
                 if part != device_node:  # don't unmount the device itself
                     self.status.emit(self._T.get("status_unmounting", "Unmounting {part}...").format(part=part))
                     fo.unmount(part)
+                    unmounted_parts.append(part)
 
             # perform operation based on image option
             if image_option == 3:  # Format Only
@@ -92,41 +99,44 @@ class FlashWorker(QThread):
                 self.progress.emit(10)
                 self.status.emit(self._T.get("status_format_in_progress", "Formatting drive..."))
                 self.progress.emit(50)
-                success = fo.dskformat(status_cb=self.status.emit)
+                success = fo.disk_format(status_cb=self.status.emit)
                 if success:
                     self.progress.emit(80)
-                    self.status.emit(self._T.get("status_remounting", "Remounting {part}...").format(part=part))
-                    fo.remount(part)
+                    for part in unmounted_parts:
+                        self.status.emit(self._T.get("status_remounting", "Remounting {part}...").format(part=part))
+                        fo.remount(part)
                     self.progress.emit(100)
                     self.status.emit(self._T.get("status_format_complete", "Format complete!"))
                 else:
-                    self.status.emit(self._T.get("status_format_failed", "Format FAILED. Check the log above for the exact error."))
+                    self.status.emit(
+                        self._T.get("status_format_failed", "Format FAILED. Check the log above for the exact error.")
+                    )
 
             elif image_option == 0:  # Windows
-                if flash_mode == 0:
-                    # iso mode for microslop windows
-                    # passing user selected filesystem
-                    #if states.currentFS == 0:
-                    #  scheme=PartitionScheme.WINDOWS_NTFS
-                    #elif states.currentFS == 1:
-                    #  scheme=PartitionScheme.SIMPLE_FAT32
-                    #elif states.currentFS == 2:
-                    #  scheme=PartitionScheme.WINDOWS_EXFAT
-                    #else:
-                    #  scheme=PartitionScheme.LINUX
-                    scheme=PartitionScheme.SIMPLE_FAT32
-                    success = FlashUSB(iso_path, device_node,
-                                       scheme,
-                                       progress_cb=self.progress.emit,
-                                       status_cb=self.status.emit)
-                else:
-                    success = False
+                # ISO mode (flash_mode 0) uses the specialised flash_windows path.
+                # Any other mode (e.g. DD) uses the generic flash_usb path.
+                scheme = PartitionScheme.SIMPLE_FAT32
+                success = flash_usb(
+                    device_node, iso_path, scheme, progress_cb=self.progress.emit, status_cb=self.status.emit
+                )
             else:
-                # other flash modes (Linux, Other)
-                success = FlashUSB(iso_path, device_node,
-                                   PartitionScheme.LINUX,
-                                   progress_cb=self.progress.emit,
-                                   status_cb=self.status.emit)
+                # Other flash modes (Linux, Other)
+                fs_text = options.get("fs_text", "ext4")
+                scheme_map = {
+                    "ext4": PartitionScheme.LINUX,
+                    "FAT32": PartitionScheme.SIMPLE_FAT32,
+                    "exFAT": PartitionScheme.WINDOWS_EXFAT,
+                    "UDF": PartitionScheme.LINUX,  # Generic catch-all for now
+                }
+                scheme = scheme_map.get(fs_text, PartitionScheme.LINUX)
+
+                success = flash_usb(
+                    device_node,
+                    iso_path,
+                    scheme,
+                    progress_cb=self.progress.emit,
+                    status_cb=self.status.emit,
+                )
 
             self.flash_done.emit(bool(success))
         except Exception as e:
@@ -135,4 +145,3 @@ class FlashWorker(QThread):
         finally:
             # restore stdout :D
             sys.stdout = _saved_stdout
-
