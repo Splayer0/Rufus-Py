@@ -1433,18 +1433,17 @@ class LufusWindow(QMainWindow):
         if success:
             self.log_message("SHA256 verification successful, proceeding to flash")
             self._clear_speed_eta()
-				if states.image_option == 0 and states.currentflash == 0:
+			if states.image_option == 0 and states.currentflash == 0:
                 dlg = WinTweaks(self)
                 if dlg.exec() == QDialog.DialogCode.Rejected:
                     self.btn_start.setEnabled(True)
                     self.btn_cancel.setEnabled(False)
                     self.progress_bar.setValue(0)
                     self.progress_bar.setFormat("")
-                    return
             self.perform_flash()
-        else:
+		else:
             # verification failed  (╯°□°)╯( ┻━┻
-            self.log_message("SHA256 verification FAILED", level="ERROR")
+			self.log_message("SHA256 verification FAILED", level="ERROR")
             QMessageBox.critical(
                 self,
                 self._T.get("msgbox_verify_fail_title", "Verification Failed"),
@@ -1555,16 +1554,16 @@ class LufusWindow(QMainWindow):
             self.progress_bar.setFormat(self._T.get("progress_complete", "Complete"))
 				# change from fo to tweaks
             self.log_message("Flash operation finished with result: SUCCESS")
-                        if states.image_option == 0 and states.currentflash == 0:
-                if getattr(states, 'win_hardware_bypass', 0) == 1:
-                    win_hardware_bypass()
-                if getattr(states, 'win_microsoft_acc', 0) == 1:
-                    if getattr(states, 'win_local_acc_chk', 0) == 1:
-                        win_local_acc_name()
-                    else:
-                        win_local_acc()
-                if getattr(states, 'win_privacy', 0) == 1:
-                    win_skip_privacy_questions()
+            if states.image_option == 0 and states.currentflash == 0:
+				if getattr(states, 'win_hardware_bypass', 0) == 1:
+	                win_hardware_bypass()
+	            if getattr(states, 'win_microsoft_acc', 0) == 1:
+	                if getattr(states, 'win_local_acc_chk', 0) == 1:
+	                    win_local_acc_name()
+	                else:
+	                    win_local_acc()
+	            if getattr(states, 'win_privacy', 0) == 1:
+	                win_skip_privacy_questions()
             QMessageBox.information(
                 self,
                 self._T.get("msgbox_success_title", "Success"),
@@ -1757,7 +1756,7 @@ class LufusWindow(QMainWindow):
         else:
             self.log_message(f"download later button clicked", level="DEBUG")
 
-# for win twaks
+# for win tweaks
     def show_tweak_dialog(self):
         dialog = WinTweaks(self)
         dialog.exec()
