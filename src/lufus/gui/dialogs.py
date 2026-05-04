@@ -3,6 +3,7 @@ from platformdirs import user_config_dir
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
+    QCheckBox,
     QDialog,
     QFileDialog,
     QFrame,
