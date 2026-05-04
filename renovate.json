@@ -8,7 +8,7 @@
   "platformAutomerge": true,
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "schedule": ["at any time"],
+    "enabled": true,
     "labels": ["dependencies", "security"]
   },
   "prConcurrentLimit": 10,
