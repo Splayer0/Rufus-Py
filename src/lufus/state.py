@@ -36,6 +36,7 @@ class AppState:
     # Windows tweaks
     win_hardware_bypass: int = 0
     win_microsoft_acc: int = 0
+    win_local_acc_chk: int = 0
     win_local_acc: str = "default"
     win_privacy: int = 0
 
