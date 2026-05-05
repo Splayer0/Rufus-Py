@@ -360,10 +360,10 @@ class WinTweaks(QDialog):
         # closes window
         self.accept()
 
-
-if __name__ == "__main__":
-    # Standard boilerplate for testing the class standalone
-    app = QApplication(sys.argv)
-    window = WinTweaks()
-    window.exec()
-    sys.exit(app.exec())
+# for debug 
+# if __name__ == "__main__":
+#     # Standard boilerplate for testing the class standalone
+#     app = QApplication(sys.argv)
+#     window = WinTweaks()
+#     window.exec()
+#     sys.exit(app.exec())
