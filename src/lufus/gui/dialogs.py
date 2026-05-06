@@ -153,7 +153,9 @@ class AboutWindow(QDialog):
         self.about_text.setReadOnly(True)
         self.about_text.setObjectName("aboutContent")
         self.about_text.setFrameShape(QFrame.Shape.NoFrame)
-        self.about_text.setStyleSheet(f"font-family: {font_family}; font-size: {tool_pt}pt;")
+        self.about_text.setStyleSheet(
+            f"font-family: {font_family}; font-size: {tool_pt}pt;"
+        )
         layout.addWidget(self.about_text, 1)
         btn_row0 = QHBoxLayout()
         btn_discord = QPushButton(self._T.get("btn_discord", "Join Discord Server"))
@@ -211,6 +213,7 @@ class SettingsDialog(QDialog):
         lbl_lang = QLabel(self._T.get("settings_label_language", "Language"))
         lbl_lang.setStyleSheet("font-weight: normal;")
         self.combo_language = QComboBox()
+        self.combo_language.currentIndexChanged.connect(self._on_language_changed)
         languages = self._detect_languages()
         if languages:
             # populate with available languages
@@ -219,7 +222,9 @@ class SettingsDialog(QDialog):
             if current_lang in languages:
                 self.combo_language.setCurrentText(current_lang)
         else:
-            self.combo_language.addItem(self._T.get("settings_no_languages", "No languages found"))
+            self.combo_language.addItem(
+                self._T.get("settings_no_languages", "No languages found")
+            )
             self.combo_language.setEnabled(False)
         layout.addWidget(lbl_lang)
         layout.addWidget(self.combo_language)
@@ -233,6 +238,8 @@ class SettingsDialog(QDialog):
         self.combo_theme.addItems(builtin)
         self.combo_theme.addItems(custom)
         current_theme = getattr(states, "Theme", "Default")
+        self.combo_theme.currentIndexChanged.connect(self._on_theme_changed)
+        self.combo_theme.setCurrentIndex(states.theme_index)
         for i in range(self.combo_theme.count()):
             # select current theme
             if self.combo_theme.itemText(i) == current_theme:
@@ -276,6 +283,12 @@ class SettingsDialog(QDialog):
         custom = sorted(p.parent.name for p in user_themes_dir.glob("*/*_theme.json"))
         return builtin, custom
 
+    def _on_theme_changed(self):
+        states.theme_index = self.combo_theme.currentIndex()
+
+    def _on_language_changed(self):
+        states.language_index = self.combo_language.currentIndex()
+
 
 class WinTweaks(QDialog):
     def __init__(self, parent=None):
@@ -285,9 +298,13 @@ class WinTweaks(QDialog):
         self.setWindowTitle("Windows Tweaks (MAY BREAK! USE CAUTION)")
         self.setFixedSize(600, 300)
         self.ask_label = QLabel("Do you want to customize your windows installation?")
-        self.hardware_checkbox = QCheckBox("Remove requirement for 4GB+ RAM, Secure Boot and TPM 2.0")
+        self.hardware_checkbox = QCheckBox(
+            "Remove requirement for 4GB+ RAM, Secure Boot and TPM 2.0"
+        )
         self.hardware_checkbox.stateChanged.connect(self.update_winhardware)
-        self.microsoft_checkbox = QCheckBox("Remove requirement for an online Microsoft Account")
+        self.microsoft_checkbox = QCheckBox(
+            "Remove requirement for an online Microsoft Account"
+        )
         self.microsoft_checkbox.stateChanged.connect(self.update_winmicrosoftacc)
         self.localacc_checkbox = QCheckBox("Create a local account with username:")
         self.localacc_checkbox.stateChanged.connect(self.update_winlocalaccchk)
@@ -299,7 +316,9 @@ class WinTweaks(QDialog):
         self.localacc_checkbox.toggled.connect(self.username_input.setEnabled)
         self.username_input.setEnabled(self.localacc_checkbox.isChecked())
         self.username_input.textChanged.connect(self.sync_username)
-        self.data_checkbox = QCheckBox("Disable data collection (skip privacy questions)")
+        self.data_checkbox = QCheckBox(
+            "Disable data collection (skip privacy questions)"
+        )
         self.data_checkbox.stateChanged.connect(self.update_winprivacy)
         self.applytweaks_btn = QPushButton("Apply")
         self.applytweaks_btn.clicked.connect(self.applywintweaks)
